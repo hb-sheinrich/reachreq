@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CONTRIBUTOR
+  VIEWER
+}
+
+enum RequirementStatus {
+  DRAFT
+  IN_REVIEW
+  SUBMITTED_FOR_RELEASE
+  APPROVED
+  REJECTED
+  POSTPONED
+}
+
+enum RequirementClassification {
+  MUST_HAVE
+  SHOULD_HAVE
+  NICE_TO_HAVE
+  WONT_HAVE
+}
+
+enum CommentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum LinkType {
+  DEPENDENCY
+  CONFLICT
+  DUPLICATE
+  RELATED
+}
+
+enum GlossaryStatus {
+  DRAFT
+  SUBMITTED_FOR_RELEASE
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum AIReviewStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id              String   @id @default(uuid())
+  azureAdObjectId String? @map("azure_ad_object_id")
+  email           String   @unique
+  name            String
+  role            UserRole @default(CONTRIBUTOR)
+  locale          String   @default("de")
+  theme           String   @default("light")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  authoredRequirements     Requirement[]
+  authoredRequirementVersions RequirementVersion[]
+  authoredComments         Comment[]
+  authoredGlossaryEntries  GlossaryEntry[]
+  authoredGlossaryVersions GlossaryVersion[]
+  auditLogs                AuditLog[]
+  aiReviews                AIReview[]
+
+  frozenRequirements       Requirement[] @relation("FrozenBy")
+
+  @@map("users")
+}
+
+model Module {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  parentId    String?  @map("parent_id")
+  sortOrder   Int      @default(0) @map("sort_order")
+  sequenceCounter Int  @default(0) @map("sequence_counter")
+  path        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  parent   Module?  @relation("ModuleHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Module[] @relation("ModuleHierarchy")
+  requirements Requirement[]
+  glossaryEntries GlossaryEntry[]
+
+  @@map("modules")
+}
+
+model Requirement {
+  id              String   @id @default(uuid())
+  humanReadableId String   @unique @map("human_readable_id")
+  moduleId        String   @map("module_id")
+  title           String
+  description     String?  @db.Text
+  context         String?  @db.Text
+  acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
+  classification  RequirementClassification
+  status          RequirementStatus @default(DRAFT)
+  source          String?
+  authorId        String   @map("author_id")
+  currentVersionId String?  @unique @map("current_version_id")
+  frozenById      String?  @map("frozen_by_id")
+  frozenAt        DateTime? @map("frozen_at")
+  statusComment   String?  @map("status_comment")
+  editVersion     Int      @default(0) @map("edit_version")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  module         Module            @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  author         User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  currentVersion RequirementVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions       RequirementVersion[] @relation("RequirementVersions")
+  fromLinks      RequirementLink[] @relation("FromRequirement")
+  toLinks        RequirementLink[] @relation("ToRequirement")
+  glossaryLinks  RequirementGlossaryLink[]
+  comments       Comment[]
+  aiReviews      AIReview[]
+
+  frozenBy       User?             @relation("FrozenBy", fields: [frozenById], references: [id], onDelete: SetNull)
+
+  @@map("requirements")
+}
+
+model RequirementVersion {
+  id              String   @id @default(uuid())
+  requirementId   String   @map("requirement_id")
+  versionNumber   Int      @map("version_number")
+  changeComment   String?  @map("change_comment")
+  title           String
+  description     String?  @db.Text
+  context         String?  @db.Text
+  acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
+  classification  RequirementClassification
+  moduleId        String   @map("module_id")
+  source          String?
+  authorId        String   @map("author_id")
+  aiReviewId      String?  @map("ai_review_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  requirement     Requirement @relation("RequirementVersions", fields: [requirementId], references: [id], onDelete: Cascade)
+  currentFor      Requirement? @relation("CurrentVersion")
+  author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  aiReview        AIReview?   @relation(fields: [aiReviewId], references: [id], onDelete: SetNull)
+
+  @@unique([requirementId, versionNumber])
+  @@map("requirement_versions")
+}
+
+model RequirementLink {
+  id        String   @id @default(uuid())
+  fromId    String   @map("from_id")
+  toId      String   @map("to_id")
+  type      LinkType
+  createdAt DateTime @default(now()) @map("created_at")
+
+  fromRequirement Requirement @relation("FromRequirement", fields: [fromId], references: [id], onDelete: Cascade)
+  toRequirement   Requirement @relation("ToRequirement", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, type])
+  @@map("requirement_links")
+}
+
+model RequirementGlossaryLink {
+  requirementId    String @map("requirement_id")
+  glossaryEntryId  String @map("glossary_entry_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  requirement   Requirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  glossaryEntry GlossaryEntry @relation(fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+
+  @@id([requirementId, glossaryEntryId])
+  @@map("requirement_glossary_links")
+}
+
+model Comment {
+  id              String   @id @default(uuid())
+  requirementId   String?  @map("requirement_id")
+  glossaryEntryId String?  @map("glossary_entry_id")
+  versionId       String?  @map("version_id")
+  textAnchor      Json?    @map("text_anchor")
+  content         String   @db.Text
+  authorId        String   @map("author_id")
+  status          CommentStatus @default(OPEN)
+  parentId        String?  @map("parent_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  requirement   Requirement?  @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  glossaryEntry GlossaryEntry? @relation(fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+  author        User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent        Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies       Comment[]     @relation("CommentReplies")
+
+  @@map("comments")
+}
+
+model GlossaryEntry {
+  id              String   @id @default(uuid())
+  term            String   @unique
+  definition      String   @db.Text
+  example         String?  @db.Text
+  status          GlossaryStatus @default(DRAFT)
+  tags            String[]
+  moduleId        String?  @map("module_id")
+  authorId        String   @map("author_id")
+  currentVersionId String?  @unique @map("current_version_id")
+  statusComment   String?  @map("status_comment")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  author        User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  module        Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  currentVersion GlossaryVersion? @relation("CurrentGlossaryVersion", fields: [currentVersionId], references: [id])
+  versions      GlossaryVersion[] @relation("GlossaryVersions")
+  comments      Comment[]
+  requirementLinks RequirementGlossaryLink[]
+  aiReviews     AIReview[]
+
+  @@map("glossary_entries")
+}
+
+model GlossaryVersion {
+  id              String   @id @default(uuid())
+  glossaryEntryId String   @map("glossary_entry_id")
+  versionNumber   Int      @map("version_number")
+  changeComment   String?  @map("change_comment")
+  term            String
+  definition      String   @db.Text
+  example         String?  @db.Text
+  tags            String[]
+  status          GlossaryStatus
+  authorId        String   @map("author_id")
+  aiReviewId      String?  @map("ai_review_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  glossaryEntry GlossaryEntry @relation("GlossaryVersions", fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+  currentFor    GlossaryEntry? @relation("CurrentGlossaryVersion")
+  author        User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  aiReview      AIReview? @relation(fields: [aiReviewId], references: [id], onDelete: SetNull)
+
+  @@unique([glossaryEntryId, versionNumber])
+  @@map("glossary_versions")
+}
+
+model AIReview {
+  id              String   @id @default(uuid())
+  requirementId   String?  @map("requirement_id")
+  glossaryEntryId String?  @map("glossary_entry_id")
+  authorId        String   @map("author_id")
+  status          AIReviewStatus @default(PENDING)
+  result          Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  requirement        Requirement? @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  glossaryEntry      GlossaryEntry? @relation(fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+  author             User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  requirementVersions RequirementVersion[]
+  glossaryVersions   GlossaryVersion[]
+
+  @@map("ai_reviews")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  action     String
+  userId     String?  @map("user_id")
+  details    Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
