@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
+import { buildRequirementWhere } from './requirements.js';
 import ExcelJS from 'exceljs';
 
 function escapeCsv(value: string | null | undefined): string {
@@ -14,17 +15,7 @@ function escapeCsv(value: string | null | undefined): string {
 }
 
 async function getRequirementsForExport(query: Record<string, string | undefined>) {
-  const where: any = {};
-  if (query.moduleId) where.moduleId = query.moduleId;
-  if (query.status) where.status = query.status;
-  if (query.classification) where.classification = query.classification;
-  if (query.q) {
-    where.OR = [
-      { title: { contains: query.q, mode: 'insensitive' } },
-      { description: { contains: query.q, mode: 'insensitive' } },
-      { humanReadableId: { contains: query.q, mode: 'insensitive' } },
-    ];
-  }
+  const where = buildRequirementWhere(query);
 
   return prisma.requirement.findMany({
     where,

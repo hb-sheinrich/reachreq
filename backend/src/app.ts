@@ -12,6 +12,8 @@ import { requirementRoutes } from './routes/requirements.js';
 import { commentRoutes } from './routes/comments.js';
 import { glossaryRoutes } from './routes/glossary.js';
 import { exportRoutes } from './routes/export.js';
+import { usecaseRoutes } from './routes/usecases.js';
+import { tagRoutes } from './routes/tags.js';
 import { auditRoutes } from './routes/audit.js';
 
 export async function buildApp() {
@@ -34,6 +36,8 @@ export async function buildApp() {
   await app.register(commentRoutes);
   await app.register(glossaryRoutes);
   await app.register(exportRoutes);
+  await app.register(usecaseRoutes);
+  await app.register(tagRoutes);
   await app.register(auditRoutes);
 
   if (process.env.NODE_ENV === 'production') {
