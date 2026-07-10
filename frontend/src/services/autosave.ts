@@ -10,7 +10,16 @@ export function useAutosave<T extends Record<string, unknown>>(
   const status = ref<SaveStatus>('idle')
   const statusMessage = ref('')
   let timer: number | null = null
+  let lastData: string | undefined = undefined
   const DEBOUNCE_MS = 2000
+
+  function serialize(data: T): string {
+    try {
+      return JSON.stringify(data)
+    } catch {
+      return ''
+    }
+  }
 
   function loadDraft(): T | null {
     try {
@@ -35,12 +44,25 @@ export function useAutosave<T extends Record<string, unknown>>(
     localStorage.removeItem(`draft:${id}`)
   }
 
+  function setBaseline() {
+    lastData = serialize(getter())
+  }
+
   async function save() {
     const data = getter()
+    const serialized = serialize(data)
+    if (lastData !== undefined && serialized === lastData) {
+      status.value = 'saved'
+      statusMessage.value = 'Gespeichert'
+      clearDraft()
+      return
+    }
+
     status.value = 'saving'
     statusMessage.value = 'Speichert...'
     try {
       await saver(data)
+      lastData = serialized
       status.value = 'saved'
       statusMessage.value = 'Gespeichert'
       clearDraft()
@@ -68,8 +90,16 @@ export function useAutosave<T extends Record<string, unknown>>(
     return save()
   }
 
-  function setupWatch(source: any) {
-    watch(source, trigger, { deep: true })
+  function setupWatch(source: any, enabled?: () => boolean) {
+    const handleChange = () => {
+      if (enabled && !enabled()) {
+        // Update the baseline while autosave is disabled (e.g. before the editor is ready)
+        setBaseline()
+        return
+      }
+      trigger()
+    }
+    watch(source, handleChange, { deep: true })
     const beforeUnload = () => {
       if (status.value === 'saving' || status.value === 'idle') {
         saveDraft(getter())
@@ -82,5 +112,5 @@ export function useAutosave<T extends Record<string, unknown>>(
     })
   }
 
-  return { status, statusMessage, save, forceSave, loadDraft, saveDraft, clearDraft, setupWatch }
+  return { status, statusMessage, save, forceSave, loadDraft, saveDraft, clearDraft, setBaseline, setupWatch }
 }

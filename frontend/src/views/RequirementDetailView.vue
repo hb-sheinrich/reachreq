@@ -35,6 +35,7 @@ const glossary = useGlossaryStore()
 
 const id = computed(() => route.params.id as string)
 const draft = ref<any>({})
+const ready = ref(false)
 const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
@@ -102,6 +103,7 @@ watch(isEditable, (editable) => {
 
 function initDraft() {
   if (!store.current) return
+  ready.value = false
   const source = store.current
   draft.value = {
     ...JSON.parse(JSON.stringify(source)),
@@ -116,6 +118,7 @@ function initDraft() {
     key: k,
     value: String(v || ''),
   }))
+  ready.value = true
 }
 
 const payload = () => {
@@ -146,7 +149,7 @@ const { status, statusMessage, forceSave, setupWatch } = useAutosave(
   (data) => store.updateRequirement(id.value, data, store.current?.editVersion || 0),
 )
 
-setupWatch(autosaveSource)
+setupWatch(autosaveSource, () => ready.value)
 
 onMounted(async () => {
   await auth.fetchUser()
@@ -321,7 +324,7 @@ function onTagClick(name: string) {
 </script>
 
 <template>
-  <div v-if="store.current" class="max-w-7xl mx-auto">
+  <div v-if="store.current && ready" class="max-w-7xl mx-auto">
     <!-- Document header -->
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
       <div>
@@ -739,7 +742,7 @@ function onTagClick(name: string) {
       </TabPanel>
 
       <TabPanel value="1" header="KI-Prüfung">
-        <AIReviewPanel :key="reviewTrigger" :review-fn="runReview" :on-ignore-warnings="onIgnoreWarnings" />
+        <AIReviewPanel :key="reviewTrigger" :auto-run="reviewTrigger > 0" :review-fn="runReview" :on-ignore-warnings="onIgnoreWarnings" />
       </TabPanel>
 
       <TabPanel value="2" header="Versionen">
