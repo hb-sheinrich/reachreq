@@ -63,6 +63,25 @@ function stripTagObjects(requirement: any) {
   return { ...rest, tags: mapTags(requirement) };
 }
 
+function buildOrderBy(query: Record<string, string | undefined>): any {
+  const field = query.sortField;
+  const order = query.sortOrder === '1' ? 'asc' : query.sortOrder === '-1' ? 'desc' : undefined;
+  if (!field || !order) return { updatedAt: 'desc' };
+
+  const allowed: Record<string, any> = {
+    title: { title: order },
+    status: { status: order },
+    classification: { classification: order },
+    humanReadableId: { humanReadableId: order },
+    createdAt: { createdAt: order },
+    updatedAt: { updatedAt: order },
+    'module.name': { module: { name: order } },
+    'author.name': { author: { name: order } },
+  };
+
+  return allowed[field] || { updatedAt: 'desc' };
+}
+
 async function buildUseCasePayload(requirement: any): Promise<UseCase> {
   return {
     title: requirement.title,
@@ -144,10 +163,10 @@ async function checkAiReview(
 
   const result = review.result as { passed?: boolean; blockers?: unknown[]; warnings?: unknown[] };
   if (result.blockers && Array.isArray(result.blockers) && result.blockers.length > 0) {
-    return { ok: false, message: 'KI-Prüfung enthält Blocker. Bitte korrigiere zuerst die gemeldeten Probleme.' };
+    return { ok: false, message: 'KI-Prüfung enthält Blocker. Bitte korrigiere zuerst die gemeldeten Probleme.', review };
   }
   if (result.warnings && Array.isArray(result.warnings) && result.warnings.length > 0 && !ignoreWarningsReason) {
-    return { ok: false, message: 'KI-Prüfung enthält Warnungen. Bitte begründe, warum du sie ignoriert.' };
+    return { ok: false, message: 'KI-Prüfung enthält Warnungen. Bitte begründe, warum du sie ignoriert.', review };
   }
 
   return { ok: true, review };
@@ -165,7 +184,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
         where,
         skip,
         take,
-        orderBy: { updatedAt: 'desc' },
+        orderBy: buildOrderBy(query),
         include: {
           module: { select: { id: true, name: true, code: true } },
           author: { select: { id: true, name: true } },

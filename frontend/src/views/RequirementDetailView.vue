@@ -2,6 +2,7 @@
 import { onMounted, ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'primevue/usetoast'
 import { useRequirementsStore } from '@/stores/requirements'
 import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
@@ -12,7 +13,7 @@ import { useCaseMessages } from '@/locales/useCase'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import TabPanel from 'primevue/tabpanel'
 import TabView from 'primevue/tabview'
 import Dialog from 'primevue/dialog'
@@ -27,6 +28,7 @@ import AutosaveIndicator from '@/components/AutosaveIndicator.vue'
 import { classificationClass } from '@/utils/classification'
 
 const { t } = useI18n({ messages: useCaseMessages })
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const store = useRequirementsStore()
@@ -42,6 +44,10 @@ const showReject = ref(false)
 const rejectReason = ref('')
 const editMode = ref(false)
 const reviewTrigger = ref(0)
+const showSubmitGate = ref(false)
+const gateReview = ref<{ id: string; result: any } | null>(null)
+const gateIgnoreReason = ref('')
+const gateSubmitting = ref(false)
 const acceptanceCriteriaText = ref('')
 const appendixEntries = ref<{ key: string; value: string }[]>([])
 const jiraLoading = ref(false)
@@ -193,13 +199,41 @@ function toggleEdit() {
 
 async function submit() {
   await forceSave()
-  await store.submitRequirement(id.value)
-  reviewTrigger.value++
-  await store.fetchVersions(id.value)
+  gateSubmitting.value = true
+  try {
+    const aiReview = await store.review(id.value)
+    if (!aiReview || aiReview.status === 'FAILED') {
+      toast.add({ severity: 'error', summary: 'KI-Prüfung fehlgeschlagen', detail: 'Bitte versuche es später erneut.', life: 5000 })
+      return
+    }
+    const result = aiReview.result
+    if (result && (result.blockers?.length || result.warnings?.length)) {
+      gateReview.value = { id: aiReview.id, result }
+      gateIgnoreReason.value = ''
+      showSubmitGate.value = true
+      return
+    }
+    await store.submitRequirement(id.value, { aiReviewId: aiReview.id })
+    reviewTrigger.value++
+    await store.fetchVersions(id.value)
+  } finally {
+    gateSubmitting.value = false
+  }
 }
 
 async function approve() {
   await store.approveRequirement(id.value)
+  await store.fetchVersions(id.value)
+}
+
+async function confirmSubmitWithIgnore() {
+  if (!gateReview.value || !gateIgnoreReason.value.trim()) return
+  await store.submitRequirement(id.value, {
+    aiReviewId: gateReview.value.id,
+    ignoreWarningsReason: gateIgnoreReason.value.trim(),
+  })
+  showSubmitGate.value = false
+  reviewTrigger.value++
   await store.fetchVersions(id.value)
 }
 
@@ -451,7 +485,7 @@ function removeAppendixEntry(index: number) {
                   {{ store.current.classification }}
                 </span>
               </div>
-              <Dropdown
+              <Select
                 v-else
                 v-model="draft.classification"
                 :options="classificationOptions"
@@ -739,7 +773,7 @@ function removeAppendixEntry(index: number) {
                 </div>
                 <div>
                   <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.module') }}</label>
-                  <Dropdown
+                  <Select
                     v-model="draft.moduleId"
                     :options="modulesStore.modules"
                     option-label="name"
@@ -770,6 +804,35 @@ function removeAppendixEntry(index: number) {
       <div class="space-y-3 min-w-96">
         <Textarea v-model="rejectReason" placeholder="Begründung" class="w-full" />
         <Button :label="t('useCase.actions.reject')" severity="danger" class="w-full" @click="reject" />
+      </div>
+    </Dialog>
+
+    <Dialog v-model:visible="showSubmitGate" header="KI-Prüfung" modal>
+      <div class="space-y-4 min-w-[28rem]" v-if="gateReview">
+        <div v-if="gateReview.result.blockers?.length" class="space-y-2">
+          <h4 class="font-display font-semibold text-glossary-alias">Blocker</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li v-for="(b, i) in gateReview.result.blockers" :key="`b-${i}`">
+              <strong>{{ b.field }}:</strong> {{ b.message }}
+              <span v-if="b.suggestion" class="text-sm text-text-muted">({{ b.suggestion }})</span>
+            </li>
+          </ul>
+        </div>
+        <div v-if="gateReview.result.warnings?.length" class="space-y-2">
+          <h4 class="font-display font-semibold text-status-in-review-fg">Warnungen</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li v-for="(w, i) in gateReview.result.warnings" :key="`w-${i}`">
+              <strong>{{ w.field }}:</strong> {{ w.message }}
+            </li>
+          </ul>
+          <div v-if="!gateReview.result.blockers?.length" class="space-y-2">
+            <Textarea v-model="gateIgnoreReason" placeholder="Begründung für das Ignorieren der Warnungen" rows="3" class="w-full" />
+            <Button label="Mit Begründung zur Freigabe" class="w-full" @click="confirmSubmitWithIgnore" />
+          </div>
+        </div>
+        <div v-if="gateReview.result.blockers?.length" class="flex justify-end">
+          <Button label="OK" @click="showSubmitGate = false" />
+        </div>
       </div>
     </Dialog>
   </div>

@@ -11,7 +11,7 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import InputChips from 'primevue/inputchips'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import TabPanel from 'primevue/tabpanel'
 import TabView from 'primevue/tabview'
 import Dialog from 'primevue/dialog'
@@ -181,7 +181,7 @@ const canTranslate = computed(() => {
 
     <div class="flex flex-wrap gap-2 items-center p-3 rounded-card bg-surface border border-border">
       <label class="text-sm text-text-muted">{{ $t('glossary.viewLanguage') }}</label>
-      <Dropdown
+      <Select
         v-model="viewLanguage"
         :options="languageOptions"
         option-label="label"
@@ -247,7 +247,7 @@ const canTranslate = computed(() => {
           </div>
           <div class="space-y-1">
             <label class="text-label uppercase text-text-muted">{{ $t('glossary.originalLanguage') }}</label>
-            <Dropdown
+            <Select
               v-model="draft.originalLanguage"
               :options="languageOptions"
               option-label="label"

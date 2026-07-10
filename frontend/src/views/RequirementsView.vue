@@ -12,7 +12,7 @@ import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import AutoComplete from 'primevue/autocomplete'
 import Dialog from 'primevue/dialog'
 import { classificationClass } from '@/utils/classification'
@@ -32,6 +32,8 @@ const filters = ref({
   moduleId: '',
   tags: [] as string[],
 })
+const sortField = ref('')
+const sortOrder = ref(0)
 const showCreate = ref(false)
 const creating = ref(false)
 const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE', description: '' })
@@ -73,6 +75,8 @@ function getSearchParams() {
     classification: filters.value.classification,
     moduleId: filters.value.moduleId,
     tags: filters.value.tags.join(','),
+    sortField: sortField.value,
+    sortOrder: String(sortOrder.value),
   }
 }
 
@@ -84,6 +88,12 @@ function search() {
 
 function filterTag(name: string) {
   filters.value.tags = [name]
+  search()
+}
+
+function onSort(event: { sortField: string | ((item: any) => string) | undefined; sortOrder: 1 | 0 | -1 | undefined | null }) {
+  sortField.value = typeof event.sortField === 'string' ? event.sortField : ''
+  sortOrder.value = event.sortOrder ?? 0
   search()
 }
 
@@ -277,21 +287,21 @@ const importModuleOptions = computed(() =>
         class="w-64"
         @keyup.enter="search"
       />
-      <Dropdown
+      <Select
         v-model="filters.status"
         :options="statusOptions"
         option-label="label"
         option-value="value"
         :placeholder="$t('app.status')"
       />
-      <Dropdown
+      <Select
         v-model="filters.classification"
         :options="classificationOptions"
         option-label="label"
         option-value="value"
         :placeholder="$t('app.classification')"
       />
-      <Dropdown
+      <Select
         v-model="filters.moduleId"
         :options="moduleOptions"
         option-label="label"
@@ -318,14 +328,17 @@ const importModuleOptions = computed(() =>
       :rows="50"
       :total-records="store.total"
       lazy
+      :sort-field="sortField"
+      :sort-order="sortOrder"
       @page="(e) => store.fetchRequirements({ ...searchParams, skip: e.first, take: e.rows })"
+      @sort="onSort"
     >
-      <Column field="humanReadableId" :header="$t('requirements.id')">
+      <Column field="humanReadableId" :header="$t('requirements.id')" sortable>
         <template #body="{ data }">
           <span class="font-mono text-text">{{ data.humanReadableId }}</span>
         </template>
       </Column>
-      <Column field="title" :header="$t('requirements.titleColumn')">
+      <Column field="title" :header="$t('requirements.titleColumn')" sortable>
         <template #body="{ data }">
           <router-link
             :to="{ name: 'RequirementDetail', params: { id: data.id } }"
@@ -335,8 +348,8 @@ const importModuleOptions = computed(() =>
           </router-link>
         </template>
       </Column>
-      <Column field="module.name" :header="$t('app.module')" />
-      <Column field="status" :header="$t('app.status')">
+      <Column field="module.name" :header="$t('app.module')" sortable />
+      <Column field="status" :header="$t('app.status')" sortable>
         <template #body="{ data }">
           <span
             class="px-2 py-1 rounded-pill text-sm font-medium"
@@ -346,7 +359,7 @@ const importModuleOptions = computed(() =>
           </span>
         </template>
       </Column>
-      <Column field="classification" :header="$t('app.classification')">
+      <Column field="classification" :header="$t('app.classification')" sortable>
         <template #body="{ data }">
           <span
             class="px-2 py-1 rounded-pill text-sm font-medium font-mono"
@@ -373,7 +386,7 @@ const importModuleOptions = computed(() =>
           </div>
         </template>
       </Column>
-      <Column field="author.name" :header="$t('app.author')" />
+      <Column field="author.name" :header="$t('app.author')" sortable />
     </DataTable>
 
     <Dialog v-model:visible="showCreate" :header="$t('requirements.new')" modal>
@@ -384,7 +397,7 @@ const importModuleOptions = computed(() =>
         </div>
         <div>
           <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.module') }}</label>
-          <Dropdown
+          <Select
             v-model="newReq.moduleId"
             :options="modulesStore.modules"
             option-label="name"
@@ -395,7 +408,7 @@ const importModuleOptions = computed(() =>
         </div>
         <div>
           <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.classification') }}</label>
-          <Dropdown
+          <Select
             v-model="newReq.classification"
             :options="createClassificationOptions"
             option-label="label"
@@ -430,7 +443,7 @@ const importModuleOptions = computed(() =>
           class="w-full"
           @click="openImportFile"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.moduleId"
           :options="importModuleOptions"
           option-label="label"
@@ -438,7 +451,7 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectModule')"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.classification"
           :options="importClassificationOptions"
           option-label="label"
@@ -446,7 +459,7 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectClassification')"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.status"
           :options="importStatusOptions"
           option-label="label"
@@ -454,7 +467,7 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectStatus')"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.targetLanguage"
           :options="languageOptions"
           option-label="label"
