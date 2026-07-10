@@ -1,6 +1,10 @@
 # Devin environment blueprint for ReachReq
 initialize: |
-  # no one-time setup needed beyond Node.js
+  # Install flyctl if not present
+  if ! command -v flyctl &> /dev/null; then
+    curl -L https://fly.io/install.sh | sh
+    echo 'export PATH="$HOME/.fly/bin:$PATH"' >> ~/.bashrc
+  fi
 
 maintenance: |
   cd backend && npm install
