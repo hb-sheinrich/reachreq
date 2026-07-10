@@ -95,7 +95,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(404).send({ error: 'User not found' });
     }
 
-    return { ...user, isAdmin: isAdminEmail(user.email) };
+    return { user: { ...user, isAdmin: isAdminEmail(user.email) } };
   });
 
   app.patch('/api/auth/me', async (req, reply) => {

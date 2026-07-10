@@ -14,6 +14,12 @@ const envSchema = z.object({
   ADMIN_EMAILS: z.string().default(''),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
+  JIRA_HOST: z.string().default('hup-company.atlassian.net'),
+  JIRA_EMAIL: z.string().optional(),
+  JIRA_API_TOKEN: z.string().optional(),
+  JIRA_PROJECT_KEY: z.string().default('REACH'),
+  JIRA_ISSUE_TYPE_ID: z.string().default('10009'),
+  JIRA_ACCOUNT_OPTION_ID: z.string().default('147'),
 });
 
 export type Env = z.infer<typeof envSchema>;
