@@ -51,7 +51,6 @@ export interface Requirement {
   _count?: { comments: number }
 
   // Use-Case 2.0 fields
-  useCaseId?: string
   category?: string
   goal?: string
   precondition?: string

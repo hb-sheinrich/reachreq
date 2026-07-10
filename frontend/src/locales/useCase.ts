@@ -18,7 +18,6 @@ export const useCaseMessages = {
       module: 'Modul',
       classification: 'Klassifizierung',
       status: 'Status',
-      useCaseId: 'Use-Case-ID',
       originalLanguage: 'Originalsprache',
       review: {
         ce: 'Geprüft von CE',
@@ -99,7 +98,6 @@ export const useCaseMessages = {
       module: 'Module',
       classification: 'Classification',
       status: 'Status',
-      useCaseId: 'Use-Case ID',
       originalLanguage: 'Original Language',
       review: {
         ce: 'Reviewed by CE',

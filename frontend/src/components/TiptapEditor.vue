@@ -290,7 +290,13 @@ watch(
     if (!editorInstance) return
     const next = newValue ?? ''
     if (next === lastEmitted.value) return
+    const currentText = editorInstance.getText()
+    if (next === currentText) {
+      lastEmitted.value = currentText
+      return
+    }
     editorInstance.commands.setContent(plainTextToTiptapHtml(next), { emitUpdate: false })
+    lastEmitted.value = editorInstance.getText()
   },
 )
 

@@ -1,4 +1,4 @@
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted, type Ref } from 'vue'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
@@ -90,16 +90,21 @@ export function useAutosave<T extends Record<string, unknown>>(
     return save()
   }
 
-  function setupWatch(source: any, enabled?: () => boolean) {
+  function setupWatch(source: any, ready?: Ref<boolean>) {
     const handleChange = () => {
-      if (enabled && !enabled()) {
-        // Update the baseline while autosave is disabled (e.g. before the editor is ready)
-        setBaseline()
+      if (ready && !ready.value) {
         return
       }
       trigger()
     }
     watch(source, handleChange, { deep: true })
+    if (ready) {
+      watch(ready, (isReady) => {
+        if (isReady) {
+          setBaseline()
+        }
+      })
+    }
     const beforeUnload = () => {
       if (status.value === 'saving' || status.value === 'idle') {
         saveDraft(getter())

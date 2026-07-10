@@ -191,7 +191,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       source: z.string().optional(),
       status: z.enum(['DRAFT', 'IN_REVIEW']).default('DRAFT'),
       tags: z.array(z.string()).default([]),
-      useCaseId: z.string().optional(),
       category: z.string().optional(),
       goal: z.string().optional(),
       precondition: z.string().optional(),
@@ -224,7 +223,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           description: data.description,
           context: data.context,
           acceptanceCriteria: data.acceptanceCriteria,
-          useCaseId: data.useCaseId,
           category: data.category,
           goal: data.goal,
           precondition: data.precondition,
@@ -298,7 +296,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       status: z.enum(['DRAFT', 'IN_REVIEW']).optional(),
       editVersion: z.number(),
       tags: z.array(z.string()).optional(),
-      useCaseId: z.string().optional().nullable(),
       category: z.string().optional().nullable(),
       goal: z.string().optional().nullable(),
       precondition: z.string().optional().nullable(),
@@ -311,6 +308,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       })).optional(),
       technicalAppendix: z.record(z.unknown()).optional().nullable(),
       originalLanguage: z.enum(['de', 'en']).optional(),
+      reviewedByCe: z.boolean().optional(),
+      reviewedByAscShe: z.boolean().optional(),
     });
 
     const parsed = schema.safeParse(req.body);
@@ -324,6 +323,12 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     if (!current) return reply.status(404).send({ error: 'Requirement not found' });
     if (!isEditable(current.status)) {
       return reply.status(403).send({ error: 'Requirement is frozen or submitted and cannot be edited directly' });
+    }
+
+    const userEmail = req.user.email.toLowerCase();
+    const ASC_SHE_ALLOWED = ['alexander.schulz@hup.de', 'simon.heinrich@hup.de'];
+    if (data.reviewedByAscShe !== undefined && !ASC_SHE_ALLOWED.includes(userEmail)) {
+      return reply.status(403).send({ error: 'Not allowed to set ASC/SHE review' });
     }
 
     const { editVersion, tags: requestedTags, ...rest } = data;
@@ -341,7 +346,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
         if (rest.postcondition === null) fieldUpdate.postcondition = null;
         if (rest.technicalAppendix === null) fieldUpdate.technicalAppendix = null;
         if (rest.category === null) fieldUpdate.category = null;
-        if (rest.useCaseId === null) fieldUpdate.useCaseId = null;
 
         const updatedCount = await tx.requirement.updateMany({
           where: { id, editVersion },
@@ -431,7 +435,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           classification: snapshot.classification,
           moduleId: snapshot.moduleId,
           source: snapshot.source,
-          useCaseId: snapshot.useCaseId,
           category: snapshot.category,
           goal: snapshot.goal,
           precondition: snapshot.precondition,
@@ -701,7 +704,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           classification: newVersion.classification,
           moduleId: newVersion.moduleId,
           source: newVersion.source,
-          useCaseId: newVersion.useCaseId,
           category: newVersion.category,
           goal: newVersion.goal,
           precondition: newVersion.precondition,

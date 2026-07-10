@@ -28,6 +28,7 @@ const toast = useToast()
 
 const id = computed(() => route.params.id as string)
 const draft = ref<any>({})
+const ready = ref(false)
 const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
@@ -42,6 +43,7 @@ onMounted(async () => {
   await store.fetchEntry(id.value)
   await store.fetchVersions(id.value)
   await loadTranslation()
+  initDraft()
 })
 
 watch(id, async (newId) => {
@@ -49,17 +51,7 @@ watch(id, async (newId) => {
   await store.fetchEntry(newId)
   await store.fetchVersions(newId)
   await loadTranslation()
-})
-
-watch(() => store.current, (entry) => {
-  if (entry) {
-    draft.value = {
-      ...entry,
-      tags: (entry.tags || []).join(', '),
-      aliases: entry.aliases || [],
-      originalLanguage: entry.originalLanguage || 'de',
-    }
-  }
+  initDraft()
 })
 
 watch(viewLanguage, () => {
@@ -67,11 +59,31 @@ watch(viewLanguage, () => {
   loadTranslation()
 })
 
+function initDraft() {
+  if (!store.current) return
+  ready.value = false
+  const entry = store.current
+  draft.value = {
+    term: entry.term,
+    definition: entry.definition,
+    example: entry.example,
+    tags: (entry.tags || []).join(', '),
+    aliases: entry.aliases || [],
+    originalLanguage: entry.originalLanguage || 'de',
+    moduleId: entry.moduleId,
+  }
+  ready.value = true
+}
+
 function payload() {
   return {
-    ...draft.value,
+    term: draft.value.term,
+    definition: draft.value.definition,
+    example: draft.value.example || null,
     tags: draft.value.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
     aliases: (draft.value.aliases || []).map((a: string) => a.trim()).filter(Boolean),
+    originalLanguage: draft.value.originalLanguage,
+    moduleId: draft.value.moduleId || null,
   }
 }
 
@@ -81,7 +93,7 @@ const { status, statusMessage, forceSave, setupWatch } = useAutosave(
   (data) => store.updateEntry(id.value, data)
 )
 
-setupWatch(draft)
+setupWatch(draft, ready)
 
 async function loadTranslation() {
   if (!store.current) return

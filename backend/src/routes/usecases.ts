@@ -30,7 +30,7 @@ export type UseCaseInput = z.infer<typeof useCaseSchema>;
 
 function mapUseCaseToRequirementFields(uc: UseCaseInput) {
   return {
-    useCaseId: uc.id || null,
+    id: uc.id || null,
     category: uc.category,
     title: uc.title,
     goal: uc.goal,
@@ -49,7 +49,7 @@ export function mapRequirementToUseCase(requirement: any): UseCase {
     : [];
 
   return {
-    id: requirement.useCaseId ?? undefined,
+    id: requirement.humanReadableId ?? undefined,
     category: requirement.category ?? undefined,
     title: requirement.title,
     tags: tagNames,
@@ -77,13 +77,12 @@ async function createRequirementFromUseCase(
   const fields = mapUseCaseToRequirementFields(uc);
   const requirement = await tx.requirement.create({
     data: {
-      humanReadableId: `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
+      humanReadableId: fields.id || `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
       moduleId,
       title: fields.title,
       description: undefined,
       context: undefined,
       acceptanceCriteria: [],
-      useCaseId: fields.useCaseId,
       category: fields.category,
       goal: fields.goal,
       precondition: fields.precondition,
@@ -241,7 +240,6 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
     const updated = await prisma.$transaction(async (tx) => {
       const updateData = {
         title: fields.title,
-        useCaseId: fields.useCaseId,
         category: fields.category,
         goal: fields.goal,
         precondition: fields.precondition,

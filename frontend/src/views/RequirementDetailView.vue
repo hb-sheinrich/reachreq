@@ -106,12 +106,22 @@ function initDraft() {
   ready.value = false
   const source = store.current
   draft.value = {
-    ...JSON.parse(JSON.stringify(source)),
+    title: source.title,
+    description: source.description,
+    context: source.context,
+    goal: source.goal,
+    precondition: source.precondition,
+    postcondition: source.postcondition,
     mainFlow: source.mainFlow || [],
     alternativeFlows: source.alternativeFlows || [],
     tags: source.tags || [],
     acceptanceCriteria: source.acceptanceCriteria || [],
     technicalAppendix: source.technicalAppendix || {},
+    category: source.category,
+    classification: source.classification,
+    moduleId: source.moduleId,
+    source: source.source,
+    originalLanguage: source.originalLanguage,
   }
   acceptanceCriteriaText.value = (draft.value.acceptanceCriteria || []).join('\n')
   appendixEntries.value = Object.entries(draft.value.technicalAppendix || {}).map(([k, v]) => ({
@@ -128,7 +138,20 @@ const payload = () => {
       .map((e) => [e.key.trim(), e.value]),
   )
   return {
-    ...draft.value,
+    title: draft.value.title,
+    description: draft.value.description,
+    context: draft.value.context,
+    goal: draft.value.goal,
+    precondition: draft.value.precondition,
+    postcondition: draft.value.postcondition,
+    mainFlow: draft.value.mainFlow,
+    alternativeFlows: draft.value.alternativeFlows,
+    tags: draft.value.tags,
+    category: draft.value.category,
+    classification: draft.value.classification,
+    moduleId: draft.value.moduleId,
+    source: draft.value.source,
+    originalLanguage: draft.value.originalLanguage,
     acceptanceCriteria: acceptanceCriteriaText.value
       .split('\n')
       .filter((x) => x.trim())
@@ -149,7 +172,7 @@ const { status, statusMessage, forceSave, setupWatch } = useAutosave(
   (data) => store.updateRequirement(id.value, data, store.current?.editVersion || 0),
 )
 
-setupWatch(autosaveSource, () => ready.value)
+setupWatch(autosaveSource, ready)
 
 onMounted(async () => {
   await auth.fetchUser()
@@ -402,9 +425,6 @@ function onTagClick(name: string) {
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.id') }}</div>
               <div class="font-mono text-text">{{ store.current.humanReadableId }}</div>
-              <div v-if="store.current.useCaseId" class="font-mono text-text-muted text-sm">
-                {{ store.current.useCaseId }}
-              </div>
             </div>
 
             <div class="space-y-1">
@@ -425,12 +445,6 @@ function onTagClick(name: string) {
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</div>
               <div v-if="!editMode" class="text-text">{{ store.current.category || '–' }}</div>
               <InputText v-else v-model="draft.category" :placeholder="t('useCase.category')" class="w-full" />
-            </div>
-
-            <div class="space-y-1">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.useCaseId') }}</div>
-              <div v-if="!editMode" class="font-mono text-text">{{ store.current.useCaseId || '–' }}</div>
-              <InputText v-else v-model="draft.useCaseId" :placeholder="t('useCase.useCaseId')" class="w-full" />
             </div>
 
             <div class="space-y-1">
@@ -479,13 +493,8 @@ function onTagClick(name: string) {
               </div>
             </section>
 
-            <!-- ID / Category -->
-            <section class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-border pb-6">
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.useCaseId') }}</label>
-                <div v-if="!editMode" class="font-mono text-text mt-1">{{ draft.useCaseId || '–' }}</div>
-                <InputText v-else v-model="draft.useCaseId" class="w-full mt-1" />
-              </div>
+            <!-- Category -->
+            <section class="border-b border-border pb-6">
               <div>
                 <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</label>
                 <div v-if="!editMode" class="text-text mt-1">{{ draft.category || '–' }}</div>
