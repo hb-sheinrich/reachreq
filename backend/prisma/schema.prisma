@@ -76,6 +76,11 @@ model User {
 
   frozenRequirements       Requirement[] @relation("FrozenBy")
 
+  reviewedCeRequirements      Requirement[] @relation("ReviewerCe")
+  reviewedAscSheRequirements  Requirement[] @relation("ReviewerAscShe")
+  reviewedCeRequirementVersions      RequirementVersion[] @relation("ReviewerCeVersion")
+  reviewedAscSheRequirementVersions  RequirementVersion[] @relation("ReviewerAscSheVersion")
+
   @@map("users")
 }
 
@@ -99,6 +104,29 @@ model Module {
   @@map("modules")
 }
 
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  requirementTags RequirementTag[]
+
+  @@map("tags")
+}
+
+model RequirementTag {
+  requirementId String   @map("requirement_id")
+  tagId         String   @map("tag_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  requirement Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([requirementId, tagId])
+  @@map("requirement_tags")
+}
+
 model Requirement {
   id              String   @id @default(uuid())
   humanReadableId String   @unique @map("human_readable_id")
@@ -107,15 +135,39 @@ model Requirement {
   description     String?  @db.Text
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
-  classification  RequirementClassification
-  status          RequirementStatus @default(DRAFT)
-  source          String?
+
+  useCaseId         String?  @map("use_case_id")
+  category          String?
+  goal              String?  @db.Text
+  precondition      String?  @db.Text
+  postcondition     String?  @db.Text
+  mainFlow          Json?    @map("main_flow")
+  alternativeFlows  Json?    @map("alternative_flows")
+  technicalAppendix Json?    @map("technical_appendix")
+
+  classification    RequirementClassification
+  status            RequirementStatus @default(DRAFT)
+  source            String?
+  originalLanguage  String?  @default("de") @map("original_language")
+
   authorId        String   @map("author_id")
   currentVersionId String?  @unique @map("current_version_id")
   frozenById      String?  @map("frozen_by_id")
   frozenAt        DateTime? @map("frozen_at")
   statusComment   String?  @map("status_comment")
   editVersion     Int      @default(0) @map("edit_version")
+
+  reviewedByCe     Boolean  @default(false) @map("reviewed_by_ce")
+  reviewedByAscShe Boolean  @default(false) @map("reviewed_by_asc_she")
+  reviewedAtCe     DateTime? @map("reviewed_at_ce")
+  reviewedAtAscShe DateTime? @map("reviewed_at_asc_she")
+  reviewerCeId     String?  @map("reviewer_ce_id")
+  reviewerAscSheId String?  @map("reviewer_asc_she_id")
+
+  jiraIssueKey       String?  @map("jira_issue_key")
+  jiraIssueUrl       String?  @map("jira_issue_url")
+  jiraIssueCreatedAt DateTime? @map("jira_issue_created_at")
+
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -128,9 +180,14 @@ model Requirement {
   glossaryLinks  RequirementGlossaryLink[]
   comments       Comment[]
   aiReviews      AIReview[]
+  tags           RequirementTag[]
+  translations   Translation[] @relation("RequirementTranslations")
 
   frozenBy       User?             @relation("FrozenBy", fields: [frozenById], references: [id], onDelete: SetNull)
+  reviewerCe     User?             @relation("ReviewerCe", fields: [reviewerCeId], references: [id], onDelete: SetNull)
+  reviewerAscShe User?             @relation("ReviewerAscShe", fields: [reviewerAscSheId], references: [id], onDelete: SetNull)
 
+  @@unique([moduleId, useCaseId])
   @@map("requirements")
 }
 
@@ -139,23 +196,55 @@ model RequirementVersion {
   requirementId   String   @map("requirement_id")
   versionNumber   Int      @map("version_number")
   changeComment   String?  @map("change_comment")
+  changeType      String?  @map("change_type")
   title           String
   description     String?  @db.Text
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
-  classification  RequirementClassification
+
+  useCaseId         String?  @map("use_case_id")
+  category          String?
+  goal              String?  @db.Text
+  precondition      String?  @db.Text
+  postcondition     String?  @db.Text
+  mainFlow          Json?    @map("main_flow")
+  alternativeFlows  Json?    @map("alternative_flows")
+  technicalAppendix Json?    @map("technical_appendix")
+
+  classification    RequirementClassification
+  status            RequirementStatus?
+  source            String?
+  originalLanguage  String?  @default("de") @map("original_language")
+
   moduleId        String   @map("module_id")
-  source          String?
   authorId        String   @map("author_id")
   aiReviewId      String?  @map("ai_review_id")
+
+  reviewedByCe     Boolean  @default(false) @map("reviewed_by_ce")
+  reviewedByAscShe Boolean  @default(false) @map("reviewed_by_asc_she")
+  reviewedAtCe     DateTime? @map("reviewed_at_ce")
+  reviewedAtAscShe DateTime? @map("reviewed_at_asc_she")
+  reviewerCeId     String?  @map("reviewer_ce_id")
+  reviewerAscSheId String?  @map("reviewer_asc_she_id")
+
+  jiraIssueKey       String?  @map("jira_issue_key")
+  jiraIssueUrl       String?  @map("jira_issue_url")
+  jiraIssueCreatedAt DateTime? @map("jira_issue_created_at")
+
+  tags            String[] @default([])
+  diff            Json?
+
   createdAt       DateTime @default(now()) @map("created_at")
 
   requirement     Requirement @relation("RequirementVersions", fields: [requirementId], references: [id], onDelete: Cascade)
   currentFor      Requirement? @relation("CurrentVersion")
   author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
   aiReview        AIReview?   @relation(fields: [aiReviewId], references: [id], onDelete: SetNull)
+  reviewerCe      User?       @relation("ReviewerCeVersion", fields: [reviewerCeId], references: [id], onDelete: SetNull)
+  reviewerAscShe  User?       @relation("ReviewerAscSheVersion", fields: [reviewerAscSheId], references: [id], onDelete: SetNull)
 
   @@unique([requirementId, versionNumber])
+  @@unique([moduleId, useCaseId])
   @@map("requirement_versions")
 }
 
@@ -214,10 +303,12 @@ model GlossaryEntry {
   example         String?  @db.Text
   status          GlossaryStatus @default(DRAFT)
   tags            String[]
+  aliases         String[] @default([])
   moduleId        String?  @map("module_id")
   authorId        String   @map("author_id")
   currentVersionId String?  @unique @map("current_version_id")
   statusComment   String?  @map("status_comment")
+  originalLanguage String?  @default("de") @map("original_language")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -228,6 +319,7 @@ model GlossaryEntry {
   comments      Comment[]
   requirementLinks RequirementGlossaryLink[]
   aiReviews     AIReview[]
+  translations  Translation[] @relation("GlossaryTranslations")
 
   @@map("glossary_entries")
 }
@@ -241,9 +333,11 @@ model GlossaryVersion {
   definition      String   @db.Text
   example         String?  @db.Text
   tags            String[]
+  aliases         String[] @default([])
   status          GlossaryStatus
   authorId        String   @map("author_id")
   aiReviewId      String?  @map("ai_review_id")
+  originalLanguage String?  @default("de") @map("original_language")
   createdAt       DateTime @default(now()) @map("created_at")
 
   glossaryEntry GlossaryEntry @relation("GlossaryVersions", fields: [glossaryEntryId], references: [id], onDelete: Cascade)
@@ -253,6 +347,35 @@ model GlossaryVersion {
 
   @@unique([glossaryEntryId, versionNumber])
   @@map("glossary_versions")
+}
+
+model Translation {
+  id              String   @id @default(uuid())
+  requirementId   String?  @map("requirement_id")
+  glossaryEntryId String?  @map("glossary_entry_id")
+  language        String
+  title           String?
+  term            String?
+  definition      String?  @db.Text
+  description     String?  @db.Text
+  context         String?  @db.Text
+  acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
+  goal            String?
+  precondition    String?  @db.Text
+  postcondition   String?  @db.Text
+  mainFlow        Json?    @map("main_flow")
+  alternativeFlows Json?   @map("alternative_flows")
+  technicalAppendix Json?  @map("technical_appendix")
+  aliases         String[] @default([])
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  requirement   Requirement?  @relation("RequirementTranslations", fields: [requirementId], references: [id], onDelete: Cascade)
+  glossaryEntry GlossaryEntry? @relation("GlossaryTranslations", fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([requirementId, language])
+  @@unique([glossaryEntryId, language])
+  @@map("translations")
 }
 
 model AIReview {
