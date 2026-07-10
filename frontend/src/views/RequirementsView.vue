@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useRequirementsStore, type Requirement } from '@/stores/requirements'
 import { useModulesStore } from '@/stores/modules'
+import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -11,6 +12,7 @@ import Dropdown from 'primevue/dropdown'
 import Dialog from 'primevue/dialog'
 
 const router = useRouter()
+const route = useRoute()
 const store = useRequirementsStore()
 const modulesStore = useModulesStore()
 
@@ -19,8 +21,12 @@ const showCreate = ref(false)
 const creating = ref(false)
 const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE', description: '' })
 
+useTitle()
+
 onMounted(() => {
-  store.fetchRequirements()
+  if (route.query.status) filters.value.status = String(route.query.status)
+  if (route.query.classification) filters.value.classification = String(route.query.classification)
+  store.fetchRequirements(filters.value as any)
   modulesStore.fetchModules()
 })
 
@@ -59,12 +65,29 @@ const classificationOptions = [
 ]
 
 const createClassificationOptions = classificationOptions.filter((o) => o.value !== '')
+
+const statusTokenMap: Record<string, string> = {
+  DRAFT: 'draft',
+  IN_REVIEW: 'in-review',
+  SUBMITTED_FOR_RELEASE: 'submitted',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  POSTPONED: 'postponed',
+}
+
+function statusStyle(status: string) {
+  const token = statusTokenMap[status] || status.toLowerCase().replace(/_/g, '-')
+  return {
+    backgroundColor: `var(--status-${token}-bg)`,
+    color: `var(--status-${token}-fg)`,
+  }
+}
 </script>
 
 <template>
   <div class="space-y-4">
     <div class="flex justify-between items-center">
-      <h1 class="text-2xl font-bold">Anforderungen</h1>
+      <h1 class="text-h1 font-display font-semibold text-text">Anforderungen</h1>
       <Button label="Neue Anforderung" icon="pi pi-plus" @click="showCreate = true" />
     </div>
     <div class="flex gap-2">
@@ -78,7 +101,7 @@ const createClassificationOptions = classificationOptions.filter((o) => o.value 
       <Column field="humanReadableId" header="ID" />
       <Column field="title" header="Titel">
         <template #body="{ data }">
-          <router-link :to="{ name: 'RequirementDetail', params: { id: data.id } }" class="text-blue-600 hover:underline">
+          <router-link :to="{ name: 'RequirementDetail', params: { id: data.id } }" class="text-link hover:underline">
             {{ data.title }}
           </router-link>
         </template>
@@ -86,13 +109,9 @@ const createClassificationOptions = classificationOptions.filter((o) => o.value 
       <Column field="module.name" header="Modul" />
       <Column field="status" header="Status">
         <template #body="{ data }">
-          <span class="px-2 py-1 rounded text-xs font-semibold" :class="{
-            'bg-gray-200': data.status === 'DRAFT',
-            'bg-blue-200': data.status === 'IN_REVIEW',
-            'bg-yellow-200': data.status === 'SUBMITTED_FOR_RELEASE',
-            'bg-green-200': data.status === 'APPROVED',
-            'bg-red-200': data.status === 'REJECTED' || data.status === 'POSTPONED',
-          }">{{ $t(`status.${data.status}`) }}</span>
+          <span class="px-2 py-1 rounded-pill text-sm font-medium" :style="statusStyle(data.status)">
+            {{ $t(`status.${data.status}`) }}
+          </span>
         </template>
       </Column>
       <Column field="classification" header="Klassifizierung" />
