@@ -2,10 +2,21 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/services/api'
 
+export interface GlossaryTerm {
+  id: string
+  term: string
+  aliases: string[]
+  definition: string
+  status: string
+  moduleId?: string | null
+  originalLanguage?: string
+}
+
 export interface GlossaryEntry {
   id: string
   term: string
   definition: string
+  aliases: string[]
   example?: string
   tags: string[]
   status: 'DRAFT' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
@@ -34,6 +45,7 @@ export interface GlossaryVersion {
 
 export const useGlossaryStore = defineStore('glossary', () => {
   const entries = ref<GlossaryEntry[]>([])
+  const terms = ref<GlossaryTerm[]>([])
   const current = ref<GlossaryEntry | null>(null)
   const versions = ref<GlossaryVersion[]>([])
   const total = ref(0)
@@ -60,6 +72,11 @@ export const useGlossaryStore = defineStore('glossary', () => {
   async function fetchEntry(id: string) {
     const data = await api.get(`/glossary/${id}`)
     current.value = data.entry
+  }
+
+  async function fetchTerms() {
+    const data = await api.get('/glossary/terms')
+    terms.value = data.terms
   }
 
   async function createEntry(payload: Partial<GlossaryEntry>) {
@@ -108,8 +125,8 @@ export const useGlossaryStore = defineStore('glossary', () => {
   }
 
   return {
-    entries, current, versions, total, loading,
-    fetchEntries, fetchEntry, createEntry, updateEntry, deleteEntry,
+    entries, terms, current, versions, total, loading,
+    fetchEntries, fetchTerms, fetchEntry, createEntry, updateEntry, deleteEntry,
     submitEntry, approveEntry, rejectEntry, reopenEntry, fetchVersions, review,
   }
 })

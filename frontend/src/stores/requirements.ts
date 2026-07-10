@@ -2,6 +2,31 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/services/api'
 
+export interface RequirementReviewer {
+  id: string
+  name: string
+}
+
+export interface RequirementVersion {
+  id: string
+  versionNumber: number
+  title: string
+  description?: string
+  context?: string
+  acceptanceCriteria: string[]
+  classification: string
+  moduleId: string
+  source?: string
+  changeComment?: string
+  changeType?: string
+  status?: string
+  createdAt: string
+  author?: { id: string; name: string; email?: string }
+  aiReview?: { id: string; status: string; result: any }
+  currentVersion?: boolean
+  diff?: Record<string, { from: unknown; to: unknown }> | null
+}
+
 export interface Requirement {
   id: string
   humanReadableId: string
@@ -24,22 +49,32 @@ export interface Requirement {
   frozenBy?: { id: string; name: string }
   currentVersion?: { id: string; versionNumber: number }
   _count?: { comments: number }
-}
 
-export interface RequirementVersion {
-  id: string
-  versionNumber: number
-  title: string
-  description?: string
-  context?: string
-  acceptanceCriteria: string[]
-  classification: string
-  moduleId: string
-  source?: string
-  changeComment?: string
-  createdAt: string
-  author?: { id: string; name: string }
-  aiReview?: { id: string; status: string; result: any }
+  // Use-Case 2.0 fields
+  useCaseId?: string
+  category?: string
+  goal?: string
+  precondition?: string
+  postcondition?: string
+  mainFlow: string[]
+  alternativeFlows: { id?: string; branchAt?: string; steps: string[] }[]
+  technicalAppendix?: Record<string, unknown>
+  originalLanguage?: 'de' | 'en'
+
+  // Reviews
+  reviewedByCe: boolean
+  reviewedAtCe?: string
+  reviewerCe?: RequirementReviewer | null
+  reviewedByAscShe: boolean
+  reviewedAtAscShe?: string
+  reviewerAscShe?: RequirementReviewer | null
+
+  // Jira
+  jiraIssueKey?: string
+  jiraIssueUrl?: string
+  jiraIssueCreatedAt?: string
+
+  tags: string[]
 }
 
 export interface RequirementLink {
@@ -77,8 +112,9 @@ export const useRequirementsStore = defineStore('requirements', () => {
     }
   }
 
-  async function fetchRequirement(id: string) {
-    const data = await api.get(`/requirements/${id}`)
+  async function fetchRequirement(id: string, lang?: string) {
+    const path = lang ? `/requirements/${id}?lang=${lang}` : `/requirements/${id}`
+    const data = await api.get(path)
     current.value = data.requirement
   }
 
@@ -128,6 +164,28 @@ export const useRequirementsStore = defineStore('requirements', () => {
     versions.value = data.versions
   }
 
+  async function setReview(id: string, body: { reviewedByCe?: boolean; reviewedByAscShe?: boolean }) {
+    const data = await api.post(`/requirements/${id}/reviews`, body)
+    current.value = data.requirement
+  }
+
+  async function createJiraTicket(id: string) {
+    const data = await api.post(`/requirements/${id}/jira-ticket`, {})
+    current.value = data.requirement
+    return data
+  }
+
+  async function translateRequirement(id: string, targetLanguage: 'de' | 'en') {
+    const data = await api.post(`/requirements/${id}/translate`, { targetLanguage })
+    return data.translation
+  }
+
+  async function importUseCase(id: string, payload: any) {
+    const data = await api.post(`/requirements/${id}/usecase/import`, payload)
+    current.value = data.requirement
+    return data.requirement
+  }
+
   async function fetchLinks(id: string) {
     const data = await api.get(`/requirements/${id}/links`)
     links.value = data
@@ -162,7 +220,8 @@ export const useRequirementsStore = defineStore('requirements', () => {
     requirements, current, versions, links, total, loading,
     fetchRequirements, fetchRequirement, createRequirement, updateRequirement,
     submitRequirement, approveRequirement, rejectRequirement, reopenRequirement,
-    startEdit, rollbackRequirement, fetchVersions, fetchLinks, createLink, deleteLink,
+    startEdit, rollbackRequirement, fetchVersions, setReview, createJiraTicket,
+    translateRequirement, importUseCase, fetchLinks, createLink, deleteLink,
     fetchGlossaryLinks, setGlossaryLinks, review,
   }
 })
