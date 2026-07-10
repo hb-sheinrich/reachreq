@@ -82,6 +82,11 @@ function search() {
   store.fetchRequirements(searchParams.value)
 }
 
+function filterTag(name: string) {
+  filters.value.tags = [name]
+  search()
+}
+
 async function create() {
   if (creating.value) return
   creating.value = true
@@ -354,13 +359,16 @@ const importModuleOptions = computed(() =>
       <Column field="tags" :header="$t('requirements.tags')">
         <template #body="{ data }">
           <div class="flex flex-wrap gap-1">
-            <span
+            <button
               v-for="tag in data.tags || []"
               :key="tag"
-              class="px-2 py-0.5 rounded-pill bg-surface-2 text-text-muted text-xs font-mono"
+              type="button"
+              :title="$t('requirements.tagClickHint')"
+              class="px-2 py-0.5 rounded-pill bg-surface-2 text-text-muted text-xs font-mono hover:bg-border transition-colors"
+              @click="filterTag(tag)"
             >
               {{ tag }}
-            </span>
+            </button>
             <span v-if="!(data.tags || []).length" class="text-text-subtle text-sm">–</span>
           </div>
         </template>

@@ -9,8 +9,10 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import Popover from 'primevue/popover'
 import type { GlossaryTerm } from '@/stores/glossary'
+import { useCaseMessages } from '@/locales/useCase'
 
 const props = defineProps<{
   modelValue?: string
@@ -24,6 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const { t } = useI18n({ messages: useCaseMessages })
 
 const definedPopover = ref<InstanceType<typeof Popover> | null>(null)
 const definedTerm = ref<{ id?: string; term?: string; definition?: string }>({})
@@ -84,7 +87,6 @@ function buildPattern(terms: GlossaryTerm[]): GlossaryPattern {
     }
   }
 
-  // Prefer longer matches and defined terms over aliases of the same length
   entries.sort((a, b) => {
     if (b.text.length !== a.text.length) return b.text.length - a.text.length
     if (a.type === 'defined' && b.type === 'alias') return -1
@@ -96,7 +98,6 @@ function buildPattern(terms: GlossaryTerm[]): GlossaryPattern {
   const parts: string[] = []
   for (const entry of entries) {
     const key = entry.text.toLowerCase()
-    // If a term and an alias share the same text, keep the term (defined entry)
     if (termMap.has(key)) {
       const existing = termMap.get(key)!
       if (existing.type === 'defined' || entry.type !== 'defined') continue
@@ -141,6 +142,10 @@ function buildDecorations(doc: any, pattern: GlossaryPattern): Decoration[] {
             'data-glossary-id': entry.id,
             'data-glossary-term': entry.term,
             'data-glossary-definition': entry.definition || '',
+            role: 'button',
+            'aria-haspopup': 'dialog',
+            'aria-expanded': 'false',
+            'aria-describedby': 'glossary-description',
             tabindex: '0',
           }),
         )
@@ -149,7 +154,9 @@ function buildDecorations(doc: any, pattern: GlossaryPattern): Decoration[] {
           Decoration.inline(from, to, {
             nodeName: 'span',
             class: 'glossary-alias',
-            title: `Bitte durch den korrekten Glossarbegriff '${entry.preferred}' ersetzen.`,
+            'data-glossary-alias': entry.alias,
+            'data-glossary-preferred': entry.preferred,
+            title: t('useCase.aliasTooltip', { term: entry.preferred }),
           }),
         )
       }
@@ -211,6 +218,24 @@ const editorClasses = computed(() => [
   props.editable ? 'edit-mode' : 'view-mode',
 ])
 
+function showPopover(event: Event, el: HTMLElement) {
+  definedTerm.value = {
+    id: el.dataset.glossaryId,
+    term: el.dataset.glossaryTerm,
+    definition: el.dataset.glossaryDefinition,
+  }
+  nextTick(() => {
+    definedPopover.value?.show(event)
+  })
+}
+
+function hidePopover(event?: FocusEvent | MouseEvent) {
+  const related = event?.relatedTarget as HTMLElement | null
+  if (!related?.closest('.glossary-defined, .glossary-popover')) {
+    definedPopover.value?.hide()
+  }
+}
+
 const editor = useEditor({
   content: plainTextToTiptapHtml(props.modelValue || ''),
   editable: props.editable,
@@ -241,26 +266,24 @@ const editor = useEditor({
   ],
   editorProps: {
     handleDOMEvents: {
-      mouseenter: (view, event) => {
+      mouseover: (view, event) => {
         const target = event.target as HTMLElement | null
         const el = target?.closest('.glossary-defined') as HTMLElement | null
-        if (el) {
-          definedTerm.value = {
-            id: el.dataset.glossaryId,
-            term: el.dataset.glossaryTerm,
-            definition: el.dataset.glossaryDefinition,
-          }
-          nextTick(() => {
-            definedPopover.value?.show(event as Event)
-          })
-        }
+        if (el) showPopover(event as Event, el)
         return false
       },
-      mouseleave: (view, event) => {
-        const related = event.relatedTarget as HTMLElement | null
-        if (!related?.closest('.glossary-defined')) {
-          definedPopover.value?.hide()
-        }
+      mouseout: (view, event) => {
+        hidePopover(event as MouseEvent)
+        return false
+      },
+      focusin: (view, event) => {
+        const target = event.target as HTMLElement | null
+        const el = target?.closest('.glossary-defined') as HTMLElement | null
+        if (el) showPopover(event as Event, el)
+        return false
+      },
+      focusout: (view, event) => {
+        hidePopover(event as FocusEvent)
         return false
       },
       click: (view, event) => {
@@ -321,6 +344,7 @@ watch(
 <template>
   <div>
     <editor-content :editor="editor" :class="editorClasses" />
+    <span id="glossary-description" class="sr-only">{{ definedTerm.definition }}</span>
     <Popover ref="definedPopover" class="glossary-popover">
       <template v-if="definedTerm.term">
         <div class="p-3 max-w-xs">
@@ -331,7 +355,7 @@ watch(
             :to="`/glossary/${definedTerm.id}`"
             class="text-sm text-link hover:underline"
           >
-            Zum Glossar
+            {{ t('useCase.glossaryPopover.link') }}
           </router-link>
         </div>
       </template>

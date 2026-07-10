@@ -2,6 +2,10 @@ import { createI18n } from 'vue-i18n'
 
 export const messages = {
   de: {
+    tag: {
+      createOption: "'{name}' anlegen",
+      create: 'Tag anlegen',
+    },
     app: {
       title: 'ReachReq — Anforderungen & Glossar',
       dashboard: 'Dashboard',
@@ -80,6 +84,7 @@ export const messages = {
       tagFilter: 'Tags filtern',
       tagSearch: 'Tags suchen',
       id: 'ID',
+      tagClickHint: 'Nach diesem Tag filtern',
       titleColumn: 'Titel',
     },
     glossary: {
@@ -188,6 +193,10 @@ export const messages = {
       tagSearch: 'Search tags',
       id: 'ID',
       titleColumn: 'Title',
+    },
+    tag: {
+      createOption: "Create '{name}'",
+      create: 'Create tag',
     },
     glossary: {
       title: 'Glossary',
