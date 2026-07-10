@@ -1,0 +1,8 @@
+# Devin environment blueprint for ReachReq
+initialize: |
+  # no one-time setup needed beyond Node.js
+
+maintenance: |
+  cd backend && npm install
+  cd backend && npx prisma generate
+  cd frontend && npm install
