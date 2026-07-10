@@ -16,6 +16,7 @@ const modulesStore = useModulesStore()
 
 const filters = ref({ q: '', status: '', classification: '', moduleId: '' })
 const showCreate = ref(false)
+const creating = ref(false)
 const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE', description: '' })
 
 onMounted(() => {
@@ -28,9 +29,16 @@ function search() {
 }
 
 async function create() {
-  const req = await store.createRequirement(newReq.value)
-  showCreate.value = false
-  router.push({ name: 'RequirementDetail', params: { id: req.id } })
+  if (creating.value) return
+  creating.value = true
+  try {
+    const req = await store.createRequirement(newReq.value)
+    newReq.value = { title: '', moduleId: '', classification: 'MUST_HAVE', description: '' }
+    showCreate.value = false
+    router.push({ name: 'RequirementDetail', params: { id: req.id } })
+  } finally {
+    creating.value = false
+  }
 }
 
 const statusOptions = [
@@ -49,6 +57,8 @@ const classificationOptions = [
   { label: 'Nice to have', value: 'NICE_TO_HAVE' },
   { label: "Won't have", value: 'WONT_HAVE' },
 ]
+
+const createClassificationOptions = classificationOptions.filter((o) => o.value !== '')
 </script>
 
 <template>
@@ -93,8 +103,8 @@ const classificationOptions = [
       <div class="space-y-3 min-w-96">
         <InputText v-model="newReq.title" placeholder="Titel" class="w-full" />
         <Dropdown v-model="newReq.moduleId" :options="modulesStore.modules" option-label="name" option-value="id" placeholder="Modul" class="w-full" />
-        <Dropdown v-model="newReq.classification" :options="classificationOptions" option-label="label" option-value="value" placeholder="Klassifizierung" class="w-full" />
-        <Button label="Erstellen" class="w-full" @click="create" />
+        <Dropdown v-model="newReq.classification" :options="createClassificationOptions" option-label="label" option-value="value" placeholder="Klassifizierung" class="w-full" />
+        <Button label="Erstellen" class="w-full" :loading="creating" :disabled="!newReq.title || !newReq.moduleId || creating" @click="create" />
       </div>
     </Dialog>
   </div>

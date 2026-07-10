@@ -13,7 +13,7 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default('http://localhost:8080'),
   ADMIN_EMAILS: z.string().default(''),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default('claude-3-5-sonnet-20241022'),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
 });
 
 export type Env = z.infer<typeof envSchema>;

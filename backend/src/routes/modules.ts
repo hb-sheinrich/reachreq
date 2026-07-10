@@ -43,8 +43,6 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/modules', async (req, reply) => {
-    if (!requireAdmin(req, reply)) return;
-
     const schema = z.object({
       name: z.string().min(1),
       code: z.string().min(1).max(10),

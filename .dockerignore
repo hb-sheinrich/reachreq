@@ -1,0 +1,15 @@
+node_modules
+backend/node_modules
+frontend/node_modules
+backend/dist
+frontend/dist
+.git
+.gitignore
+.env
+.env.example
+*.log
+.devin-files
+docker-compose.yml
+fly.toml
+README.md
+docs

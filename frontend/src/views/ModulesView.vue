@@ -4,6 +4,7 @@ import { useModulesStore, type Module } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
+import Textarea from 'primevue/textarea'
 import Dropdown from 'primevue/dropdown'
 import Tree from 'primevue/tree'
 import Dialog from 'primevue/dialog'
@@ -14,7 +15,7 @@ const auth = useAuthStore()
 const showCreate = ref(false)
 const showEdit = ref(false)
 const editing = ref<Partial<Module>>({})
-const newModule = ref<Partial<Module>>({ code: '', name: '', parentId: null })
+const newModule = ref<Partial<Module>>({ code: '', name: '', description: '', parentId: null })
 
 onMounted(() => store.fetchModules())
 
@@ -30,7 +31,7 @@ function asTreeNodes(nodes: any[]): any[] {
 async function create() {
   await store.createModule(newModule.value)
   showCreate.value = false
-  newModule.value = { code: '', name: '', parentId: null }
+  newModule.value = { code: '', name: '', description: '', parentId: null }
 }
 
 function editNode(node: any) {
@@ -53,7 +54,7 @@ async function remove(id: string) {
   <div class="space-y-4">
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold">Module</h1>
-      <Button v-if="auth.isAdmin" label="Neues Modul" icon="pi pi-plus" @click="showCreate = true" />
+      <Button v-if="auth.isAuthenticated" label="Neues Modul" icon="pi pi-plus" @click="showCreate = true" />
     </div>
     <Tree :value="asTreeNodes(store.tree)" class="w-full">
       <template #default="{ node }">
@@ -71,6 +72,7 @@ async function remove(id: string) {
       <div class="space-y-3 min-w-96">
         <InputText v-model="newModule.name" placeholder="Name" class="w-full" />
         <InputText v-model="newModule.code" placeholder="Code (z.B. LOG)" class="w-full" />
+        <Textarea v-model="newModule.description" placeholder="Beschreibung (optional)" rows="3" class="w-full" />
         <Dropdown v-model="newModule.parentId" :options="[{ name: 'Kein Elternmodul', id: null }, ...store.modules]" option-label="name" option-value="id" placeholder="Elternmodul" class="w-full" />
         <Button label="Erstellen" class="w-full" @click="create" />
       </div>
