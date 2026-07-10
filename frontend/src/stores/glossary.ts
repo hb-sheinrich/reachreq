@@ -8,6 +8,8 @@ export interface GlossaryEntry {
   definition: string
   example?: string
   tags: string[]
+  aliases: string[]
+  originalLanguage: 'de' | 'en'
   status: 'DRAFT' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
   moduleId?: string | null
   authorId: string
@@ -16,6 +18,17 @@ export interface GlossaryEntry {
   module?: { id: string; name: string }
   author?: { id: string; name: string }
   currentVersion?: { id: string; versionNumber: number }
+}
+
+export interface GlossaryTranslation {
+  id: string
+  glossaryEntryId: string
+  language: string
+  term: string | null
+  definition: string | null
+  aliases: string[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface GlossaryVersion {
@@ -35,6 +48,7 @@ export interface GlossaryVersion {
 export const useGlossaryStore = defineStore('glossary', () => {
   const entries = ref<GlossaryEntry[]>([])
   const current = ref<GlossaryEntry | null>(null)
+  const translation = ref<GlossaryEntry | null>(null)
   const versions = ref<GlossaryVersion[]>([])
   const total = ref(0)
   const loading = ref(false)
@@ -60,6 +74,11 @@ export const useGlossaryStore = defineStore('glossary', () => {
   async function fetchEntry(id: string) {
     const data = await api.get(`/glossary/${id}`)
     current.value = data.entry
+  }
+
+  async function fetchTranslation(id: string, lang: string) {
+    const data = await api.get(`/glossary/${id}?lang=${encodeURIComponent(lang)}`)
+    translation.value = data.entry
   }
 
   async function createEntry(payload: Partial<GlossaryEntry>) {
@@ -97,6 +116,11 @@ export const useGlossaryStore = defineStore('glossary', () => {
     current.value = data.entry
   }
 
+  async function translateEntry(id: string, targetLanguage: string) {
+    const data = await api.post(`/glossary/${id}/translate`, { targetLanguage })
+    return data.translation as GlossaryTranslation
+  }
+
   async function fetchVersions(id: string) {
     const data = await api.get(`/glossary/${id}/versions`)
     versions.value = data.versions
@@ -108,8 +132,8 @@ export const useGlossaryStore = defineStore('glossary', () => {
   }
 
   return {
-    entries, current, versions, total, loading,
-    fetchEntries, fetchEntry, createEntry, updateEntry, deleteEntry,
-    submitEntry, approveEntry, rejectEntry, reopenEntry, fetchVersions, review,
+    entries, current, translation, versions, total, loading,
+    fetchEntries, fetchEntry, fetchTranslation, createEntry, updateEntry, deleteEntry,
+    submitEntry, approveEntry, rejectEntry, reopenEntry, translateEntry, fetchVersions, review,
   }
 })

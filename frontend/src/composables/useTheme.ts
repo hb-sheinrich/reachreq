@@ -51,5 +51,13 @@ export function useTheme() {
     setTheme(theme.value === 'light' ? 'dark' : 'light')
   }
 
-  return { theme: theme as Ref<Theme>, setTheme, toggleTheme }
+  function syncFromUser(userTheme?: string | null) {
+    if (userTheme === 'light' || userTheme === 'dark') {
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        setTheme(userTheme)
+      }
+    }
+  }
+
+  return { theme: theme as Ref<Theme>, setTheme, toggleTheme, syncFromUser }
 }

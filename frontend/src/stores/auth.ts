@@ -8,6 +8,8 @@ export interface User {
   email: string
   role: string
   isAdmin: boolean
+  locale?: 'de' | 'en'
+  theme?: 'light' | 'dark'
 }
 
 export const useAuthStore = defineStore('auth', () => {
