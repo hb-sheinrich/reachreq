@@ -20,12 +20,14 @@ export const useCaseMessages = {
       status: 'Status',
       originalLanguage: 'Originalsprache',
       review: {
+        title: 'Prüfungen',
         ce: 'Geprüft von CE',
         ascShe: 'Geprüft von ASC/SHE',
         ascSheTooltip: 'Nur durch ASC/SHE änderbar',
         by: 'von {name}',
         at: 'am {date}',
       },
+      nonExportable: 'Nicht Teil des UC-2.0-Exports',
       jira: {
         create: 'Jira-Ticket anlegen',
         link: 'Jira: {key}',
@@ -100,12 +102,14 @@ export const useCaseMessages = {
       status: 'Status',
       originalLanguage: 'Original Language',
       review: {
+        title: 'Reviews',
         ce: 'Reviewed by CE',
         ascShe: 'Reviewed by ASC/SHE',
         ascSheTooltip: 'Only editable by ASC/SHE',
         by: 'by {name}',
         at: 'on {date}',
       },
+      nonExportable: 'Not part of the Use-Case 2.0 export',
       jira: {
         create: 'Create Jira ticket',
         link: 'Jira: {key}',

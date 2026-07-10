@@ -15,6 +15,7 @@ import InputText from 'primevue/inputtext'
 import Dropdown from 'primevue/dropdown'
 import AutoComplete from 'primevue/autocomplete'
 import Dialog from 'primevue/dialog'
+import { classificationClass } from '@/utils/classification'
 
 const router = useRouter()
 const route = useRoute()
@@ -135,26 +136,11 @@ const statusTokenMap: Record<string, string> = {
   POSTPONED: 'postponed',
 }
 
-const classificationTokenMap: Record<string, string> = {
-  MUST_HAVE: 'must',
-  SHOULD_HAVE: 'should',
-  NICE_TO_HAVE: 'could',
-  WONT_HAVE: 'wont',
-}
-
 function statusStyle(status: string) {
   const token = statusTokenMap[status] || status.toLowerCase().replace(/_/g, '-')
   return {
     backgroundColor: `var(--status-${token}-bg)`,
     color: `var(--status-${token}-fg)`,
-  }
-}
-
-function classificationStyle(classification: string) {
-  const token = classificationTokenMap[classification] || classification.toLowerCase().replace(/_/g, '-')
-  return {
-    backgroundColor: `var(--classification-${token}-bg)`,
-    color: `var(--classification-${token}-fg)`,
   }
 }
 
@@ -269,6 +255,7 @@ const importModuleOptions = computed(() =>
           v-if="auth.isAdmin"
           :label="$t('requirements.import')"
           icon="pi pi-upload"
+          severity="secondary"
           @click="showImport = true"
         />
         <Button
@@ -328,7 +315,11 @@ const importModuleOptions = computed(() =>
       lazy
       @page="(e) => store.fetchRequirements({ ...searchParams, skip: e.first, take: e.rows })"
     >
-      <Column field="humanReadableId" :header="$t('requirements.id')" />
+      <Column field="humanReadableId" :header="$t('requirements.id')">
+        <template #body="{ data }">
+          <span class="font-mono text-text">{{ data.humanReadableId }}</span>
+        </template>
+      </Column>
       <Column field="title" :header="$t('requirements.titleColumn')">
         <template #body="{ data }">
           <router-link
@@ -353,10 +344,10 @@ const importModuleOptions = computed(() =>
       <Column field="classification" :header="$t('app.classification')">
         <template #body="{ data }">
           <span
-            class="px-2 py-1 rounded-pill text-sm font-medium"
-            :style="classificationStyle(data.classification)"
+            class="px-2 py-1 rounded-pill text-sm font-medium font-mono"
+            :class="classificationClass(data.classification)"
           >
-            {{ $t(`classification.${data.classification}`) }}
+            {{ data.classification }}
           </span>
         </template>
       </Column>
@@ -378,24 +369,33 @@ const importModuleOptions = computed(() =>
     </DataTable>
 
     <Dialog v-model:visible="showCreate" :header="$t('requirements.new')" modal>
-      <div class="space-y-3 min-w-96">
-        <InputText v-model="newReq.title" :placeholder="$t('requirements.titleColumn')" class="w-full" />
-        <Dropdown
-          v-model="newReq.moduleId"
-          :options="modulesStore.modules"
-          option-label="name"
-          option-value="id"
-          :placeholder="$t('app.module')"
-          class="w-full"
-        />
-        <Dropdown
-          v-model="newReq.classification"
-          :options="createClassificationOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('app.classification')"
-          class="w-full"
-        />
+      <div class="space-y-4 min-w-96">
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('requirements.titleColumn') }}</label>
+          <InputText v-model="newReq.title" :placeholder="$t('requirements.titleColumn')" class="w-full mt-1" />
+        </div>
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.module') }}</label>
+          <Dropdown
+            v-model="newReq.moduleId"
+            :options="modulesStore.modules"
+            option-label="name"
+            option-value="id"
+            :placeholder="$t('app.module')"
+            class="w-full mt-1"
+          />
+        </div>
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.classification') }}</label>
+          <Dropdown
+            v-model="newReq.classification"
+            :options="createClassificationOptions"
+            option-label="label"
+            option-value="value"
+            :placeholder="$t('app.classification')"
+            class="w-full mt-1"
+          />
+        </div>
         <Button
           :label="$t('app.create')"
           class="w-full"

@@ -235,6 +235,7 @@ const editor = useEditor({
     Placeholder.configure({
       placeholder: props.placeholder || '',
       emptyEditorClass: 'is-editor-empty',
+      showOnlyWhenEditable: true,
     }),
     GlossaryHighlight.configure({ terms: props.terms || [] }),
   ],

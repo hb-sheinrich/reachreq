@@ -24,6 +24,7 @@ import VersionTimeline from '@/components/VersionTimeline.vue'
 import AIReviewPanel from '@/components/AIReviewPanel.vue'
 import CommentList from '@/components/CommentList.vue'
 import AutosaveIndicator from '@/components/AutosaveIndicator.vue'
+import { classificationClass } from '@/utils/classification'
 
 const { t } = useI18n({ messages: useCaseMessages })
 const route = useRoute()
@@ -67,19 +68,8 @@ const statusClasses: Record<string, string> = {
   ARCHIVED: 'bg-status-archived-bg text-status-archived-fg',
 }
 
-const classificationClasses: Record<string, string> = {
-  MUST_HAVE: 'bg-classification-must-bg text-classification-must-fg',
-  SHOULD_HAVE: 'bg-classification-should-bg text-classification-should-fg',
-  NICE_TO_HAVE: 'bg-classification-nice-bg text-classification-nice-fg',
-  WONT_HAVE: 'bg-classification-wont-bg text-classification-wont-fg',
-}
-
 function statusClass(status: string) {
   return statusClasses[status] || 'bg-surface-2 text-text-muted'
-}
-
-function classificationClass(classification: string) {
-  return classificationClasses[classification] || 'bg-surface-2 text-text-muted'
 }
 
 function formatDate(value?: string) {
@@ -113,7 +103,11 @@ function initDraft() {
     precondition: source.precondition,
     postcondition: source.postcondition,
     mainFlow: source.mainFlow || [],
-    alternativeFlows: source.alternativeFlows || [],
+    alternativeFlows: (source.alternativeFlows || []).map((flow: any) => ({
+      id: flow.id,
+      afterStep: flow.afterStep ?? flow.branchAt ?? '',
+      steps: flow.steps || [''],
+    })),
     tags: source.tags || [],
     acceptanceCriteria: source.acceptanceCriteria || [],
     technicalAppendix: source.technicalAppendix || {},
@@ -309,7 +303,7 @@ function addMainStep() {
 }
 
 function addAlternativeFlow() {
-  draft.value.alternativeFlows.push({ branchAt: '', steps: [''] })
+  draft.value.alternativeFlows.push({ afterStep: '', steps: [''] })
 }
 
 function removeAlternativeFlow(flowIndex: number) {
@@ -341,9 +335,7 @@ function removeAppendixEntry(index: number) {
   appendixEntries.value.splice(index, 1)
 }
 
-function onTagClick(name: string) {
-  router.push({ name: 'Requirements', query: { tags: name } })
-}
+
 </script>
 
 <template>
@@ -362,10 +354,10 @@ function onTagClick(name: string) {
             {{ t(`useCase.statuses.${store.current.status}`) }}
           </span>
           <span
-            class="px-3 py-1 rounded-pill text-sm font-medium"
+            class="px-3 py-1 rounded-pill text-sm font-medium font-mono"
             :class="classificationClass(store.current.classification)"
           >
-            {{ t(`useCase.classifications.${store.current.classification}`) }}
+            {{ store.current.classification }}
           </span>
           <AutosaveIndicator :status="status" :message="statusMessage" />
         </div>
@@ -436,9 +428,19 @@ function onTagClick(name: string) {
 
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.classification') }}</div>
-              <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium" :class="classificationClass(store.current.classification)">
-                {{ t(`useCase.classifications.${store.current.classification}`) }}
-              </span>
+              <div v-if="!editMode">
+                <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium font-mono" :class="classificationClass(store.current.classification)">
+                  {{ store.current.classification }}
+                </span>
+              </div>
+              <Dropdown
+                v-else
+                v-model="draft.classification"
+                :options="classificationOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1">
@@ -458,8 +460,8 @@ function onTagClick(name: string) {
             </div>
 
             <div class="border-t border-border pt-3 space-y-3">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.review.ce') }}</div>
-              <ReviewPanel :requirement="store.current" :user="auth.user" @update="onReview" />
+              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.review.title') }}</div>
+              <ReviewPanel :requirement="store.current" :user="auth.user" :disabled="!editMode" @update="onReview" />
             </div>
 
             <div v-if="auth.isAdmin && store.current.reviewedByAscShe" class="border-t border-border pt-3">
@@ -490,35 +492,6 @@ function onTagClick(name: string) {
               <div v-else>
                 <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.title') }}</label>
                 <InputText v-model="draft.title" :placeholder="t('useCase.title')" class="w-full mt-1" />
-              </div>
-            </section>
-
-            <!-- Category -->
-            <section class="border-b border-border pb-6">
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</label>
-                <div v-if="!editMode" class="text-text mt-1">{{ draft.category || '–' }}</div>
-                <InputText v-else v-model="draft.category" class="w-full mt-1" />
-              </div>
-            </section>
-
-            <!-- Tags -->
-            <section class="border-b border-border pb-6">
-              <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.tags') }}</label>
-              <div v-if="!editMode" class="flex flex-wrap gap-2 mt-2">
-                <button
-                  v-for="tag in draft.tags"
-                  :key="tag"
-                  type="button"
-                  class="px-2 py-1 rounded-pill bg-surface-2 text-text-muted text-sm font-mono hover:bg-border transition-colors"
-                  @click="onTagClick(tag)"
-                >
-                  {{ tag }}
-                </button>
-                <span v-if="!draft.tags?.length" class="text-text-subtle text-sm">–</span>
-              </div>
-              <div v-else class="mt-2">
-                <TagInput v-model="draft.tags" />
               </div>
             </section>
 
@@ -598,8 +571,8 @@ function onTagClick(name: string) {
                       <span class="px-2 py-1 rounded-field bg-border text-text font-mono text-sm">A{{ flowIndex + 1 }}</span>
                       <div class="flex items-center gap-2">
                         <span class="text-sm text-text-muted">{{ t('useCase.mainFlow') }}:</span>
-                        <span v-if="!editMode" class="font-mono text-text">{{ flow.branchAt || '–' }}</span>
-                        <InputText v-else v-model="flow.branchAt" placeholder="z.B. 2" class="w-20" />
+                        <span v-if="!editMode" class="font-mono text-text">{{ flow.afterStep || '–' }}</span>
+                        <InputText v-else v-model="flow.afterStep" placeholder="z.B. 2" class="w-20" />
                       </div>
                     </div>
                     <Button v-if="editMode" icon="pi pi-trash" text size="small" severity="danger" :title="t('useCase.actions.removeFlow')" @click="removeAlternativeFlow(flowIndex)" />
@@ -684,15 +657,23 @@ function onTagClick(name: string) {
               </table>
             </section>
 
-            <!-- Secondary: description, context, acceptance criteria -->
-            <section class="space-y-6">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.description') }}</div>
-              <TiptapEditor
-                v-model="draft.description"
-                :editable="editMode"
-                :terms="glossary.terms"
-                :placeholder="t('useCase.description')"
-              />
+            <!-- Non-UC-2.0 fields -->
+            <section class="space-y-6 border-t border-border pt-6">
+              <div class="flex items-center gap-2">
+                <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.nonExportable') }}</div>
+              </div>
+
+              <div>
+                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.description') }}</label>
+                <div class="mt-2">
+                  <TiptapEditor
+                    v-model="draft.description"
+                    :editable="editMode"
+                    :terms="glossary.terms"
+                    :placeholder="t('useCase.description')"
+                  />
+                </div>
+              </div>
 
               <div>
                 <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.context') }}</label>
@@ -714,7 +695,7 @@ function onTagClick(name: string) {
                     :disabled="!editMode"
                     rows="4"
                     class="w-full"
-                    :placeholder="t('useCase.acceptanceCriteria')"
+                    :placeholder="editMode ? t('useCase.acceptanceCriteria') : ''"
                   />
                 </div>
               </div>
@@ -731,16 +712,6 @@ function onTagClick(name: string) {
                     :options="modulesStore.modules"
                     option-label="name"
                     option-value="id"
-                    class="w-full mt-1"
-                  />
-                </div>
-                <div>
-                  <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.classification') }}</label>
-                  <Dropdown
-                    v-model="draft.classification"
-                    :options="classificationOptions"
-                    option-label="label"
-                    option-value="value"
                     class="w-full mt-1"
                   />
                 </div>

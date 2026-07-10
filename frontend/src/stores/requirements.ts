@@ -56,7 +56,7 @@ export interface Requirement {
   precondition?: string
   postcondition?: string
   mainFlow: string[]
-  alternativeFlows: { id?: string; branchAt?: string; steps: string[] }[]
+  alternativeFlows: { id?: string; afterStep?: string; branchAt?: string; steps: string[] }[]
   technicalAppendix?: Record<string, unknown>
   originalLanguage?: 'de' | 'en'
 
