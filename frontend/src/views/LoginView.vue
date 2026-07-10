@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
+import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
+
+useTitle()
 
 const auth = useAuthStore()
 </script>
@@ -12,7 +15,7 @@ const auth = useAuthStore()
       <template #title>ReachReq</template>
       <template #subtitle>Anforderungs- und Glossar-Tool</template>
       <template #content>
-        <p class="mb-4">Bitte melde dich mit deinem Microsoft 365 Konto an.</p>
+        <p class="mb-4 text-text-muted">Bitte melde dich mit deinem Microsoft 365 Konto an.</p>
         <Button label="Mit Microsoft anmelden" icon="pi pi-microsoft" class="w-full" @click="auth.login" />
       </template>
     </Card>

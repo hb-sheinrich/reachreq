@@ -2,6 +2,9 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useTitle } from '@/composables/useTitle'
+
+useTitle()
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -20,6 +23,6 @@ onMounted(() => {
 
 <template>
   <div class="flex h-full items-center justify-center">
-    <p>Anmeldung läuft...</p>
+    <p class="text-text-muted">Anmeldung läuft...</p>
   </div>
 </template>

@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useModulesStore, type Module } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
+import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -16,6 +17,8 @@ const showCreate = ref(false)
 const showEdit = ref(false)
 const editing = ref<Partial<Module>>({})
 const newModule = ref<Partial<Module>>({ code: '', name: '', description: '', parentId: null })
+
+useTitle()
 
 onMounted(() => store.fetchModules())
 
@@ -53,13 +56,13 @@ async function remove(id: string) {
 <template>
   <div class="space-y-4">
     <div class="flex justify-between items-center">
-      <h1 class="text-2xl font-bold">Module</h1>
+      <h1 class="text-h1 font-display font-semibold text-text">Module</h1>
       <Button v-if="auth.isAuthenticated" label="Neues Modul" icon="pi pi-plus" @click="showCreate = true" />
     </div>
     <Tree :value="asTreeNodes(store.tree)" class="w-full">
       <template #default="{ node }">
         <div class="flex items-center justify-between w-full">
-          <span>{{ node.label }}</span>
+          <span class="text-text">{{ node.label }}</span>
           <div v-if="auth.isAdmin" class="flex gap-1">
             <Button icon="pi pi-pencil" text size="small" @click="editNode(node)" />
             <Button icon="pi pi-trash" text size="small" severity="danger" @click="remove(node.key)" />

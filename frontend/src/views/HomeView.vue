@@ -2,11 +2,14 @@
 import { onMounted, ref } from 'vue'
 import { useRequirementsStore } from '@/stores/requirements'
 import { useGlossaryStore } from '@/stores/glossary'
-import Card from 'primevue/card'
+import { useTitle } from '@/composables/useTitle'
+import DashboardTile from '@/components/DashboardTile.vue'
 
 const reqStore = useRequirementsStore()
 const glosStore = useGlossaryStore()
 const counts = ref({ draft: 0, inReview: 0, submitted: 0, approved: 0, glossary: 0 })
+
+useTitle()
 
 onMounted(async () => {
   await reqStore.fetchRequirements({ take: 1000 })
@@ -23,21 +26,29 @@ onMounted(async () => {
 
 <template>
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <Card>
-      <template #title>Entwürfe</template>
-      <template #content>{{ counts.draft }}</template>
-    </Card>
-    <Card>
-      <template #title>In Prüfung</template>
-      <template #content>{{ counts.inReview }}</template>
-    </Card>
-    <Card>
-      <template #title>Zur Freigabe</template>
-      <template #content>{{ counts.submitted }}</template>
-    </Card>
-    <Card>
-      <template #title>Freigegeben</template>
-      <template #content>{{ counts.approved }}</template>
-    </Card>
+    <DashboardTile
+      :to="{ name: 'Requirements', query: { status: 'DRAFT' } }"
+      label="Entwürfe"
+      :count="counts.draft"
+      status="draft"
+    />
+    <DashboardTile
+      :to="{ name: 'Requirements', query: { status: 'IN_REVIEW' } }"
+      label="In Prüfung"
+      :count="counts.inReview"
+      status="in-review"
+    />
+    <DashboardTile
+      :to="{ name: 'Requirements', query: { status: 'SUBMITTED_FOR_RELEASE' } }"
+      label="Zur Freigabe"
+      :count="counts.submitted"
+      status="submitted"
+    />
+    <DashboardTile
+      :to="{ name: 'Requirements', query: { status: 'APPROVED' } }"
+      label="Freigegeben"
+      :count="counts.approved"
+      status="approved"
+    />
   </div>
 </template>

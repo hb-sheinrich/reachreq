@@ -1,0 +1,150 @@
+/* ReachReq design tokens — single source of truth for color, type, spacing, radius, motion.
+   Use the CSS custom properties in components; never hardcode theme values. */
+
+:root {
+  /* Neutral surfaces */
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f5;
+  --border: #e2e5ea;
+  --border-strong: #cbd1da;
+
+  /* Text */
+  --text: #1a1d23;
+  --text-muted: #5b6472;
+  --text-subtle: #8a93a2;
+
+  /* Brand / primary accent */
+  --accent: #10b981;
+  --accent-hover: #0e9e74;
+  --accent-fg: #05261c;
+
+  /* Link & interaction */
+  --link: #2563eb;
+
+  /* Focus ring */
+  --focus: #10b981;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+
+  /* Typography */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --fs-id: 30px;
+  --fs-h1: 24px;
+  --fs-h2: 18px;
+  --fs-body: 14px;
+  --fs-sm: 13px;
+  --fs-label: 12px;
+
+  /* Spacing (4 px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Radius */
+  --radius-card: 12px;
+  --radius-field: 8px;
+  --radius-pill: 999px;
+
+  /* Motion */
+  --dur: 160ms;
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+
+  /* Status colors (workflow) */
+  --status-draft-fg: #475569;
+  --status-draft-bg: #eef1f5;
+  --status-in-review-fg: #b45309;
+  --status-in-review-bg: #fef3c7;
+  --status-submitted-fg: #1d4ed8;
+  --status-submitted-bg: #dbeafe;
+  --status-approved-fg: #047857;
+  --status-approved-bg: #d1fae5;
+  --status-rejected-fg: #991b1b;
+  --status-rejected-bg: #fee2e2;
+  --status-postponed-fg: #6b7280;
+  --status-postponed-bg: #f3f4f6;
+  --status-archived-fg: #64748b;
+  --status-archived-bg: #e2e8f0;
+
+  /* Classification (MoSCoW) — background plus text */
+  --classification-must-fg: #450a16;
+  --classification-must-bg: #e11d48;
+  --classification-should-fg: #451a03;
+  --classification-should-bg: #d97706;
+  --classification-could-fg: #082f49;
+  --classification-could-bg: #0ea5e9;
+  --classification-nice-fg: #082f49;
+  --classification-nice-bg: #0ea5e9;
+  --classification-wont-fg: #0f172a;
+  --classification-wont-bg: #64748b;
+
+  /* Glossar highlighting */
+  --glossary-defined: #10b981;
+  --glossary-alias: #dc2626;
+}
+
+[data-theme="dark"] {
+  --bg: #0e1116;
+  --surface: #171b22;
+  --surface-2: #1f242d;
+  --border: #2a3039;
+  --border-strong: #3a424e;
+
+  --text: #e8ebf0;
+  --text-muted: #a2abb8;
+  --text-subtle: #6b7482;
+
+  --accent: #34d399;
+  --accent-hover: #4adea8;
+  --accent-fg: #05261c;
+  --link: #60a5fa;
+  --focus: #34d399;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+
+  --status-draft-fg: #e2e8f0;
+  --status-draft-bg: rgba(148, 163, 184, 0.15);
+  --status-in-review-fg: #fcd34d;
+  --status-in-review-bg: rgba(245, 158, 11, 0.15);
+  --status-submitted-fg: #93c5fd;
+  --status-submitted-bg: rgba(59, 130, 246, 0.15);
+  --status-approved-fg: #6ee7b7;
+  --status-approved-bg: rgba(16, 185, 129, 0.15);
+  --status-rejected-fg: #fca5a5;
+  --status-rejected-bg: rgba(239, 68, 68, 0.15);
+  --status-postponed-fg: #d1d5db;
+  --status-postponed-bg: rgba(107, 114, 128, 0.15);
+  --status-archived-fg: #cbd5e1;
+  --status-archived-bg: rgba(100, 116, 139, 0.15);
+
+  --classification-must-fg: #ffe4e6;
+  --classification-must-bg: #be123c;
+  --classification-should-fg: #ffedd5;
+  --classification-should-bg: #b45309;
+  --classification-could-fg: #e0f2fe;
+  --classification-could-bg: #0369a1;
+  --classification-nice-fg: #e0f2fe;
+  --classification-nice-bg: #0369a1;
+  --classification-wont-fg: #f1f5f9;
+  --classification-wont-bg: #475569;
+
+  --glossary-defined: #34d399;
+  --glossary-alias: #f87171;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-theme="dark"] {
+    --dur: 0ms;
+  }
+}

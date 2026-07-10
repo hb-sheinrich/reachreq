@@ -5,6 +5,7 @@ import { useRequirementsStore } from '@/stores/requirements'
 import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
 import { useAutosave } from '@/services/autosave'
+import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -28,6 +29,8 @@ const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
 const reviewTrigger = ref(0)
+
+useTitle(computed(() => store.current?.humanReadableId || ''))
 
 const statusOptions = [
   { label: 'Entwurf', value: 'DRAFT' },
@@ -107,8 +110,8 @@ function onIgnoreWarnings(reason: string) {
   <div v-if="store.current" class="space-y-4">
     <div class="flex justify-between items-center">
       <div>
-        <h1 class="text-2xl font-bold">{{ store.current.humanReadableId }}</h1>
-        <p class="text-sm text-gray-600">Status: {{ $t(`status.${store.current.status}`) }}</p>
+        <h1 class="text-h1 font-display font-semibold text-text">{{ store.current.humanReadableId }}</h1>
+        <p class="text-sm text-text-muted">Status: {{ $t(`status.${store.current.status}`) }}</p>
       </div>
       <div class="flex items-center gap-2">
         <AutosaveIndicator :status="status" :message="statusMessage" />

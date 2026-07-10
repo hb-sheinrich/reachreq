@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useAuthStore } from '@/stores/auth'
 import { useAutosave } from '@/services/autosave'
+import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -24,6 +25,8 @@ const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
 const reviewTrigger = ref(0)
+
+useTitle(computed(() => store.current?.term || ''))
 
 onMounted(async () => {
   await store.fetchEntry(id.value)
@@ -78,7 +81,7 @@ async function runReview() {
 <template>
   <div v-if="store.current" class="space-y-4">
     <div class="flex justify-between items-center">
-      <h1 class="text-2xl font-bold">{{ store.current.term }}</h1>
+      <h1 class="text-h1 font-display font-semibold text-text">{{ store.current.term }}</h1>
       <div class="flex items-center gap-2">
         <AutosaveIndicator :status="status" :message="statusMessage" />
         <Button v-if="store.current.status === 'DRAFT'" label="Zur Freigabe" @click="submit" />
