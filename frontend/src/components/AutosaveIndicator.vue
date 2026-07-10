@@ -16,5 +16,5 @@ const severityMap: Record<string, 'info' | 'success' | 'danger' | 'warn'> = {
 </script>
 
 <template>
-  <Badge :value="message || status" :severity="severityMap[status] || 'info'" />
+  <Badge v-if="message || status !== 'idle'" :value="message || status" :severity="severityMap[status] || 'info'" />
 </template>

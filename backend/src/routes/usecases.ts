@@ -9,6 +9,7 @@ import { buildRequirementWhere } from './requirements.js';
 
 const alternativeFlowSchema = z.object({
   id: z.string().optional(),
+  afterStep: z.string().optional(),
   branchAt: z.string().optional(),
   steps: z.array(z.string()).default([]),
 });
@@ -18,6 +19,9 @@ export const useCaseSchema = z.object({
   category: z.string().optional(),
   title: z.string().min(1),
   tags: z.array(z.string()).default([]),
+  description: z.string().optional(),
+  context: z.string().optional(),
+  acceptanceCriteria: z.array(z.string()).default([]),
   goal: z.string().optional(),
   precondition: z.string().optional(),
   mainFlow: z.array(z.string()).default([]),
@@ -30,14 +34,21 @@ export type UseCaseInput = z.infer<typeof useCaseSchema>;
 
 function mapUseCaseToRequirementFields(uc: UseCaseInput) {
   return {
-    useCaseId: uc.id || null,
+    id: uc.id || null,
     category: uc.category,
     title: uc.title,
+    description: uc.description,
+    context: uc.context,
+    acceptanceCriteria: uc.acceptanceCriteria,
     goal: uc.goal,
     precondition: uc.precondition,
     postcondition: uc.postcondition,
     mainFlow: uc.mainFlow,
-    alternativeFlows: uc.alternativeFlows,
+    alternativeFlows: uc.alternativeFlows.map((flow) => ({
+      id: flow.id,
+      afterStep: flow.afterStep ?? flow.branchAt ?? null,
+      steps: flow.steps,
+    })),
     technicalAppendix: uc.technicalAppendix,
     tags: uc.tags,
   };
@@ -49,14 +60,21 @@ export function mapRequirementToUseCase(requirement: any): UseCase {
     : [];
 
   return {
-    id: requirement.useCaseId ?? undefined,
+    id: requirement.humanReadableId ?? undefined,
     category: requirement.category ?? undefined,
     title: requirement.title,
     tags: tagNames,
+    description: requirement.description ?? undefined,
+    context: requirement.context ?? undefined,
+    acceptanceCriteria: requirement.acceptanceCriteria ?? [],
     goal: requirement.goal ?? undefined,
     precondition: requirement.precondition ?? undefined,
     mainFlow: (requirement.mainFlow as string[]) ?? undefined,
-    alternativeFlows: (requirement.alternativeFlows as { id?: string; branchAt?: string; steps: string[] }[]) ?? undefined,
+    alternativeFlows: (requirement.alternativeFlows as { id?: string; afterStep?: string; branchAt?: string; steps: string[] }[])?.map((flow) => ({
+      id: flow.id,
+      afterStep: flow.afterStep ?? flow.branchAt ?? undefined,
+      steps: flow.steps,
+    })) ?? undefined,
     postcondition: requirement.postcondition ?? undefined,
     technicalAppendix: (requirement.technicalAppendix as Record<string, unknown>) ?? undefined,
   };
@@ -77,13 +95,12 @@ async function createRequirementFromUseCase(
   const fields = mapUseCaseToRequirementFields(uc);
   const requirement = await tx.requirement.create({
     data: {
-      humanReadableId: `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
+      humanReadableId: fields.id || `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
       moduleId,
       title: fields.title,
-      description: undefined,
-      context: undefined,
-      acceptanceCriteria: [],
-      useCaseId: fields.useCaseId,
+      description: fields.description,
+      context: fields.context,
+      acceptanceCriteria: fields.acceptanceCriteria,
       category: fields.category,
       goal: fields.goal,
       precondition: fields.precondition,
@@ -241,8 +258,10 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
     const updated = await prisma.$transaction(async (tx) => {
       const updateData = {
         title: fields.title,
-        useCaseId: fields.useCaseId,
         category: fields.category,
+        description: fields.description,
+        context: fields.context,
+        acceptanceCriteria: fields.acceptanceCriteria,
         goal: fields.goal,
         precondition: fields.precondition,
         postcondition: fields.postcondition,

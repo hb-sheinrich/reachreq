@@ -51,13 +51,12 @@ export interface Requirement {
   _count?: { comments: number }
 
   // Use-Case 2.0 fields
-  useCaseId?: string
   category?: string
   goal?: string
   precondition?: string
   postcondition?: string
   mainFlow: string[]
-  alternativeFlows: { id?: string; branchAt?: string; steps: string[] }[]
+  alternativeFlows: { id?: string; afterStep?: string; branchAt?: string; steps: string[] }[]
   technicalAppendix?: Record<string, unknown>
   originalLanguage?: 'de' | 'en'
 

@@ -69,6 +69,7 @@ model User {
   authoredRequirements     Requirement[]
   authoredRequirementVersions RequirementVersion[]
   authoredComments         Comment[]
+  commentMentions          CommentMention[]
   authoredGlossaryEntries  GlossaryEntry[]
   authoredGlossaryVersions GlossaryVersion[]
   auditLogs                AuditLog[]
@@ -136,7 +137,6 @@ model Requirement {
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
 
-  useCaseId         String?  @map("use_case_id")
   category          String?
   goal              String?  @db.Text
   precondition      String?  @db.Text
@@ -187,7 +187,6 @@ model Requirement {
   reviewerCe     User?             @relation("ReviewerCe", fields: [reviewerCeId], references: [id], onDelete: SetNull)
   reviewerAscShe User?             @relation("ReviewerAscShe", fields: [reviewerAscSheId], references: [id], onDelete: SetNull)
 
-  @@unique([moduleId, useCaseId])
   @@map("requirements")
 }
 
@@ -202,7 +201,6 @@ model RequirementVersion {
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
 
-  useCaseId         String?  @map("use_case_id")
   category          String?
   goal              String?  @db.Text
   precondition      String?  @db.Text
@@ -244,7 +242,6 @@ model RequirementVersion {
   reviewerAscShe  User?       @relation("ReviewerAscSheVersion", fields: [reviewerAscSheId], references: [id], onDelete: SetNull)
 
   @@unique([requirementId, versionNumber])
-  @@unique([moduleId, useCaseId])
   @@map("requirement_versions")
 }
 
@@ -292,8 +289,20 @@ model Comment {
   author        User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
   parent        Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies       Comment[]     @relation("CommentReplies")
+  mentions      CommentMention[]
 
   @@map("comments")
+}
+
+model CommentMention {
+  id        String  @id @default(uuid())
+  commentId String  @map("comment_id")
+  userId    String  @map("user_id")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("comment_mentions")
 }
 
 model GlossaryEntry {

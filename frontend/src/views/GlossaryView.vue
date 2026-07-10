@@ -8,7 +8,7 @@ import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 
@@ -133,7 +133,7 @@ function statusStyle(status: string) {
         :placeholder="$t('glossary.aliasFilter')"
         class="w-64"
       />
-      <Dropdown
+      <Select
         v-model="filters.status"
         :options="statusOptions"
         option-label="label"
@@ -229,7 +229,7 @@ function statusStyle(status: string) {
           :placeholder="$t('glossary.aliases') + ' (comma-separated)'"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="newEntry.originalLanguage"
           :options="languageOptions"
           option-label="label"

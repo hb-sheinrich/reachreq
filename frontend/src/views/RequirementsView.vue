@@ -12,9 +12,10 @@ import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import AutoComplete from 'primevue/autocomplete'
 import Dialog from 'primevue/dialog'
+import { classificationClass } from '@/utils/classification'
 
 const router = useRouter()
 const route = useRoute()
@@ -31,6 +32,8 @@ const filters = ref({
   moduleId: '',
   tags: [] as string[],
 })
+const sortField = ref('')
+const sortOrder = ref(0)
 const showCreate = ref(false)
 const creating = ref(false)
 const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE', description: '' })
@@ -72,6 +75,8 @@ function getSearchParams() {
     classification: filters.value.classification,
     moduleId: filters.value.moduleId,
     tags: filters.value.tags.join(','),
+    sortField: sortField.value,
+    sortOrder: String(sortOrder.value),
   }
 }
 
@@ -79,6 +84,17 @@ const searchParams = computed(getSearchParams)
 
 function search() {
   store.fetchRequirements(searchParams.value)
+}
+
+function filterTag(name: string) {
+  filters.value.tags = [name]
+  search()
+}
+
+function onSort(event: { sortField: string | ((item: any) => string) | undefined; sortOrder: 1 | 0 | -1 | undefined | null }) {
+  sortField.value = typeof event.sortField === 'string' ? event.sortField : ''
+  sortOrder.value = event.sortOrder ?? 0
+  search()
 }
 
 async function create() {
@@ -135,26 +151,11 @@ const statusTokenMap: Record<string, string> = {
   POSTPONED: 'postponed',
 }
 
-const classificationTokenMap: Record<string, string> = {
-  MUST_HAVE: 'must',
-  SHOULD_HAVE: 'should',
-  NICE_TO_HAVE: 'could',
-  WONT_HAVE: 'wont',
-}
-
 function statusStyle(status: string) {
   const token = statusTokenMap[status] || status.toLowerCase().replace(/_/g, '-')
   return {
     backgroundColor: `var(--status-${token}-bg)`,
     color: `var(--status-${token}-fg)`,
-  }
-}
-
-function classificationStyle(classification: string) {
-  const token = classificationTokenMap[classification] || classification.toLowerCase().replace(/_/g, '-')
-  return {
-    backgroundColor: `var(--classification-${token}-bg)`,
-    color: `var(--classification-${token}-fg)`,
   }
 }
 
@@ -269,6 +270,7 @@ const importModuleOptions = computed(() =>
           v-if="auth.isAdmin"
           :label="$t('requirements.import')"
           icon="pi pi-upload"
+          severity="secondary"
           @click="showImport = true"
         />
         <Button
@@ -285,21 +287,21 @@ const importModuleOptions = computed(() =>
         class="w-64"
         @keyup.enter="search"
       />
-      <Dropdown
+      <Select
         v-model="filters.status"
         :options="statusOptions"
         option-label="label"
         option-value="value"
         :placeholder="$t('app.status')"
       />
-      <Dropdown
+      <Select
         v-model="filters.classification"
         :options="classificationOptions"
         option-label="label"
         option-value="value"
         :placeholder="$t('app.classification')"
       />
-      <Dropdown
+      <Select
         v-model="filters.moduleId"
         :options="moduleOptions"
         option-label="label"
@@ -326,10 +328,17 @@ const importModuleOptions = computed(() =>
       :rows="50"
       :total-records="store.total"
       lazy
+      :sort-field="sortField"
+      :sort-order="sortOrder"
       @page="(e) => store.fetchRequirements({ ...searchParams, skip: e.first, take: e.rows })"
+      @sort="onSort"
     >
-      <Column field="humanReadableId" :header="$t('requirements.id')" />
-      <Column field="title" :header="$t('requirements.titleColumn')">
+      <Column field="humanReadableId" :header="$t('requirements.id')" sortable>
+        <template #body="{ data }">
+          <span class="font-mono text-text">{{ data.humanReadableId }}</span>
+        </template>
+      </Column>
+      <Column field="title" :header="$t('requirements.titleColumn')" sortable>
         <template #body="{ data }">
           <router-link
             :to="{ name: 'RequirementDetail', params: { id: data.id } }"
@@ -339,8 +348,8 @@ const importModuleOptions = computed(() =>
           </router-link>
         </template>
       </Column>
-      <Column field="module.name" :header="$t('app.module')" />
-      <Column field="status" :header="$t('app.status')">
+      <Column field="module.name" :header="$t('app.module')" sortable />
+      <Column field="status" :header="$t('app.status')" sortable>
         <template #body="{ data }">
           <span
             class="px-2 py-1 rounded-pill text-sm font-medium"
@@ -350,38 +359,64 @@ const importModuleOptions = computed(() =>
           </span>
         </template>
       </Column>
-      <Column field="classification" :header="$t('app.classification')">
+      <Column field="classification" :header="$t('app.classification')" sortable>
         <template #body="{ data }">
           <span
-            class="px-2 py-1 rounded-pill text-sm font-medium"
-            :style="classificationStyle(data.classification)"
+            class="px-2 py-1 rounded-pill text-sm font-medium font-mono"
+            :class="classificationClass(data.classification)"
           >
-            {{ $t(`classification.${data.classification}`) }}
+            {{ data.classification }}
           </span>
         </template>
       </Column>
-      <Column field="author.name" :header="$t('app.author')" />
+      <Column field="tags" :header="$t('requirements.tags')">
+        <template #body="{ data }">
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="tag in data.tags || []"
+              :key="tag"
+              type="button"
+              :title="$t('requirements.tagClickHint')"
+              class="px-2 py-0.5 rounded-pill bg-surface-2 text-text-muted text-xs font-mono hover:bg-border transition-colors"
+              @click="filterTag(tag)"
+            >
+              {{ tag }}
+            </button>
+            <span v-if="!(data.tags || []).length" class="text-text-subtle text-sm">–</span>
+          </div>
+        </template>
+      </Column>
+      <Column field="author.name" :header="$t('app.author')" sortable />
     </DataTable>
 
     <Dialog v-model:visible="showCreate" :header="$t('requirements.new')" modal>
-      <div class="space-y-3 min-w-96">
-        <InputText v-model="newReq.title" :placeholder="$t('requirements.titleColumn')" class="w-full" />
-        <Dropdown
-          v-model="newReq.moduleId"
-          :options="modulesStore.modules"
-          option-label="name"
-          option-value="id"
-          :placeholder="$t('app.module')"
-          class="w-full"
-        />
-        <Dropdown
-          v-model="newReq.classification"
-          :options="createClassificationOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('app.classification')"
-          class="w-full"
-        />
+      <div class="space-y-4 min-w-96">
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('requirements.titleColumn') }}</label>
+          <InputText v-model="newReq.title" :placeholder="$t('requirements.titleColumn')" class="w-full mt-1" />
+        </div>
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.module') }}</label>
+          <Select
+            v-model="newReq.moduleId"
+            :options="modulesStore.modules"
+            option-label="name"
+            option-value="id"
+            :placeholder="$t('app.module')"
+            class="w-full mt-1"
+          />
+        </div>
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.classification') }}</label>
+          <Select
+            v-model="newReq.classification"
+            :options="createClassificationOptions"
+            option-label="label"
+            option-value="value"
+            :placeholder="$t('app.classification')"
+            class="w-full mt-1"
+          />
+        </div>
         <Button
           :label="$t('app.create')"
           class="w-full"
@@ -408,7 +443,7 @@ const importModuleOptions = computed(() =>
           class="w-full"
           @click="openImportFile"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.moduleId"
           :options="importModuleOptions"
           option-label="label"
@@ -416,7 +451,7 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectModule')"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.classification"
           :options="importClassificationOptions"
           option-label="label"
@@ -424,7 +459,7 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectClassification')"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.status"
           :options="importStatusOptions"
           option-label="label"
@@ -432,7 +467,7 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectStatus')"
           class="w-full"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.targetLanguage"
           :options="languageOptions"
           option-label="label"

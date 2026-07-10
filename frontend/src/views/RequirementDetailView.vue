@@ -2,6 +2,7 @@
 import { onMounted, ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'primevue/usetoast'
 import { useRequirementsStore } from '@/stores/requirements'
 import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
@@ -12,7 +13,7 @@ import { useCaseMessages } from '@/locales/useCase'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import TabPanel from 'primevue/tabpanel'
 import TabView from 'primevue/tabview'
 import Dialog from 'primevue/dialog'
@@ -24,8 +25,10 @@ import VersionTimeline from '@/components/VersionTimeline.vue'
 import AIReviewPanel from '@/components/AIReviewPanel.vue'
 import CommentList from '@/components/CommentList.vue'
 import AutosaveIndicator from '@/components/AutosaveIndicator.vue'
+import { classificationClass } from '@/utils/classification'
 
 const { t } = useI18n({ messages: useCaseMessages })
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const store = useRequirementsStore()
@@ -35,17 +38,23 @@ const glossary = useGlossaryStore()
 
 const id = computed(() => route.params.id as string)
 const draft = ref<any>({})
+const ready = ref(false)
 const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
 const editMode = ref(false)
 const reviewTrigger = ref(0)
+const showSubmitGate = ref(false)
+const gateReview = ref<{ id: string; result: any } | null>(null)
+const gateIgnoreReason = ref('')
+const gateSubmitting = ref(false)
 const acceptanceCriteriaText = ref('')
 const appendixEntries = ref<{ key: string; value: string }[]>([])
 const jiraLoading = ref(false)
 const importLoading = ref(false)
 const importError = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+const pendingAnchor = ref<{ field: string; text: string; start: number; end: number } | null>(null)
 
 useTitle(computed(() => store.current?.humanReadableId || ''))
 
@@ -66,19 +75,8 @@ const statusClasses: Record<string, string> = {
   ARCHIVED: 'bg-status-archived-bg text-status-archived-fg',
 }
 
-const classificationClasses: Record<string, string> = {
-  MUST_HAVE: 'bg-classification-must-bg text-classification-must-fg',
-  SHOULD_HAVE: 'bg-classification-should-bg text-classification-should-fg',
-  NICE_TO_HAVE: 'bg-classification-nice-bg text-classification-nice-fg',
-  WONT_HAVE: 'bg-classification-wont-bg text-classification-wont-fg',
-}
-
 function statusClass(status: string) {
   return statusClasses[status] || 'bg-surface-2 text-text-muted'
-}
-
-function classificationClass(classification: string) {
-  return classificationClasses[classification] || 'bg-surface-2 text-text-muted'
 }
 
 function formatDate(value?: string) {
@@ -102,20 +100,36 @@ watch(isEditable, (editable) => {
 
 function initDraft() {
   if (!store.current) return
+  ready.value = false
   const source = store.current
   draft.value = {
-    ...JSON.parse(JSON.stringify(source)),
+    title: source.title,
+    description: source.description,
+    context: source.context,
+    goal: source.goal,
+    precondition: source.precondition,
+    postcondition: source.postcondition,
     mainFlow: source.mainFlow || [],
-    alternativeFlows: source.alternativeFlows || [],
+    alternativeFlows: (source.alternativeFlows || []).map((flow: any) => ({
+      id: flow.id,
+      afterStep: flow.afterStep ?? flow.branchAt ?? '',
+      steps: flow.steps || [''],
+    })),
     tags: source.tags || [],
     acceptanceCriteria: source.acceptanceCriteria || [],
     technicalAppendix: source.technicalAppendix || {},
+    category: source.category,
+    classification: source.classification,
+    moduleId: source.moduleId,
+    source: source.source,
+    originalLanguage: source.originalLanguage,
   }
   acceptanceCriteriaText.value = (draft.value.acceptanceCriteria || []).join('\n')
   appendixEntries.value = Object.entries(draft.value.technicalAppendix || {}).map(([k, v]) => ({
     key: k,
     value: String(v || ''),
   }))
+  ready.value = true
 }
 
 const payload = () => {
@@ -125,7 +139,20 @@ const payload = () => {
       .map((e) => [e.key.trim(), e.value]),
   )
   return {
-    ...draft.value,
+    title: draft.value.title,
+    description: draft.value.description,
+    context: draft.value.context,
+    goal: draft.value.goal,
+    precondition: draft.value.precondition,
+    postcondition: draft.value.postcondition,
+    mainFlow: draft.value.mainFlow,
+    alternativeFlows: draft.value.alternativeFlows,
+    tags: draft.value.tags,
+    category: draft.value.category,
+    classification: draft.value.classification,
+    moduleId: draft.value.moduleId,
+    source: draft.value.source,
+    originalLanguage: draft.value.originalLanguage,
     acceptanceCriteria: acceptanceCriteriaText.value
       .split('\n')
       .filter((x) => x.trim())
@@ -146,7 +173,7 @@ const { status, statusMessage, forceSave, setupWatch } = useAutosave(
   (data) => store.updateRequirement(id.value, data, store.current?.editVersion || 0),
 )
 
-setupWatch(autosaveSource)
+setupWatch(autosaveSource, ready)
 
 onMounted(async () => {
   await auth.fetchUser()
@@ -172,13 +199,41 @@ function toggleEdit() {
 
 async function submit() {
   await forceSave()
-  await store.submitRequirement(id.value)
-  reviewTrigger.value++
-  await store.fetchVersions(id.value)
+  gateSubmitting.value = true
+  try {
+    const aiReview = await store.review(id.value)
+    if (!aiReview || aiReview.status === 'FAILED') {
+      toast.add({ severity: 'error', summary: 'KI-Prüfung fehlgeschlagen', detail: 'Bitte versuche es später erneut.', life: 5000 })
+      return
+    }
+    const result = aiReview.result
+    if (result && (result.blockers?.length || result.warnings?.length)) {
+      gateReview.value = { id: aiReview.id, result }
+      gateIgnoreReason.value = ''
+      showSubmitGate.value = true
+      return
+    }
+    await store.submitRequirement(id.value, { aiReviewId: aiReview.id })
+    reviewTrigger.value++
+    await store.fetchVersions(id.value)
+  } finally {
+    gateSubmitting.value = false
+  }
 }
 
 async function approve() {
   await store.approveRequirement(id.value)
+  await store.fetchVersions(id.value)
+}
+
+async function confirmSubmitWithIgnore() {
+  if (!gateReview.value || !gateIgnoreReason.value.trim()) return
+  await store.submitRequirement(id.value, {
+    aiReviewId: gateReview.value.id,
+    ignoreWarningsReason: gateIgnoreReason.value.trim(),
+  })
+  showSubmitGate.value = false
+  reviewTrigger.value++
   await store.fetchVersions(id.value)
 }
 
@@ -204,6 +259,23 @@ async function rollback() {
 async function onReview(payload: { reviewedByCe?: boolean; reviewedByAscShe?: boolean }) {
   await store.setReview(id.value, payload)
   await store.fetchVersions(id.value)
+}
+
+function onCreateComment(anchor: { field: string; text: string; start: number; end: number }) {
+  pendingAnchor.value = anchor
+  activeTab.value = 3
+}
+
+function onCommentJump(anchor: { field: string; text: string; start: number; end: number }) {
+  activeTab.value = 0
+  nextTick(() => {
+    const selector = `[data-field="${anchor.field}"] .ProseMirror`
+    const el = document.querySelector(selector) as HTMLElement | null
+    if (el) {
+      el.focus()
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
 }
 
 async function onCreateJira() {
@@ -283,7 +355,7 @@ function addMainStep() {
 }
 
 function addAlternativeFlow() {
-  draft.value.alternativeFlows.push({ branchAt: '', steps: [''] })
+  draft.value.alternativeFlows.push({ afterStep: '', steps: [''] })
 }
 
 function removeAlternativeFlow(flowIndex: number) {
@@ -315,13 +387,11 @@ function removeAppendixEntry(index: number) {
   appendixEntries.value.splice(index, 1)
 }
 
-function onTagClick(name: string) {
-  router.push({ name: 'Requirements', query: { tags: name } })
-}
+
 </script>
 
 <template>
-  <div v-if="store.current" class="max-w-7xl mx-auto">
+  <div v-if="store.current && ready" class="max-w-7xl mx-auto">
     <!-- Document header -->
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
       <div>
@@ -336,10 +406,10 @@ function onTagClick(name: string) {
             {{ t(`useCase.statuses.${store.current.status}`) }}
           </span>
           <span
-            class="px-3 py-1 rounded-pill text-sm font-medium"
+            class="px-3 py-1 rounded-pill text-sm font-medium font-mono"
             :class="classificationClass(store.current.classification)"
           >
-            {{ t(`useCase.classifications.${store.current.classification}`) }}
+            {{ store.current.classification }}
           </span>
           <AutosaveIndicator :status="status" :message="statusMessage" />
         </div>
@@ -399,9 +469,6 @@ function onTagClick(name: string) {
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.id') }}</div>
               <div class="font-mono text-text">{{ store.current.humanReadableId }}</div>
-              <div v-if="store.current.useCaseId" class="font-mono text-text-muted text-sm">
-                {{ store.current.useCaseId }}
-              </div>
             </div>
 
             <div class="space-y-1">
@@ -413,21 +480,25 @@ function onTagClick(name: string) {
 
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.classification') }}</div>
-              <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium" :class="classificationClass(store.current.classification)">
-                {{ t(`useCase.classifications.${store.current.classification}`) }}
-              </span>
+              <div v-if="!editMode">
+                <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium font-mono" :class="classificationClass(store.current.classification)">
+                  {{ store.current.classification }}
+                </span>
+              </div>
+              <Select
+                v-else
+                v-model="draft.classification"
+                :options="classificationOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</div>
               <div v-if="!editMode" class="text-text">{{ store.current.category || '–' }}</div>
               <InputText v-else v-model="draft.category" :placeholder="t('useCase.category')" class="w-full" />
-            </div>
-
-            <div class="space-y-1">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.useCaseId') }}</div>
-              <div v-if="!editMode" class="font-mono text-text">{{ store.current.useCaseId || '–' }}</div>
-              <InputText v-else v-model="draft.useCaseId" :placeholder="t('useCase.useCaseId')" class="w-full" />
             </div>
 
             <div class="space-y-1">
@@ -441,8 +512,8 @@ function onTagClick(name: string) {
             </div>
 
             <div class="border-t border-border pt-3 space-y-3">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.review.ce') }}</div>
-              <ReviewPanel :requirement="store.current" :user="auth.user" @update="onReview" />
+              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.review.title') }}</div>
+              <ReviewPanel :requirement="store.current" :user="auth.user" :disabled="!editMode" @update="onReview" />
             </div>
 
             <div v-if="auth.isAdmin && store.current.reviewedByAscShe" class="border-t border-border pt-3">
@@ -476,40 +547,6 @@ function onTagClick(name: string) {
               </div>
             </section>
 
-            <!-- ID / Category -->
-            <section class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-border pb-6">
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.useCaseId') }}</label>
-                <div v-if="!editMode" class="font-mono text-text mt-1">{{ draft.useCaseId || '–' }}</div>
-                <InputText v-else v-model="draft.useCaseId" class="w-full mt-1" />
-              </div>
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</label>
-                <div v-if="!editMode" class="text-text mt-1">{{ draft.category || '–' }}</div>
-                <InputText v-else v-model="draft.category" class="w-full mt-1" />
-              </div>
-            </section>
-
-            <!-- Tags -->
-            <section class="border-b border-border pb-6">
-              <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.tags') }}</label>
-              <div v-if="!editMode" class="flex flex-wrap gap-2 mt-2">
-                <button
-                  v-for="tag in draft.tags"
-                  :key="tag"
-                  type="button"
-                  class="px-2 py-1 rounded-pill bg-surface-2 text-text-muted text-sm font-mono hover:bg-border transition-colors"
-                  @click="onTagClick(tag)"
-                >
-                  {{ tag }}
-                </button>
-                <span v-if="!draft.tags?.length" class="text-text-subtle text-sm">–</span>
-              </div>
-              <div v-else class="mt-2">
-                <TagInput v-model="draft.tags" />
-              </div>
-            </section>
-
             <!-- Goal -->
             <section class="border-b border-border pb-6">
               <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.goal') }}</label>
@@ -519,6 +556,8 @@ function onTagClick(name: string) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.goal')"
+                  field="goal"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -532,6 +571,8 @@ function onTagClick(name: string) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.precondition')"
+                  field="precondition"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -555,6 +596,8 @@ function onTagClick(name: string) {
                       :editable="editMode"
                       :terms="glossary.terms"
                       :placeholder="`${t('useCase.mainFlow')} ${index + 1}`"
+                      :field="`mainFlow.${index}`"
+                      @create-comment="onCreateComment"
                     />
                   </div>
                   <div v-if="editMode" class="flex flex-col gap-1">
@@ -586,8 +629,8 @@ function onTagClick(name: string) {
                       <span class="px-2 py-1 rounded-field bg-border text-text font-mono text-sm">A{{ flowIndex + 1 }}</span>
                       <div class="flex items-center gap-2">
                         <span class="text-sm text-text-muted">{{ t('useCase.mainFlow') }}:</span>
-                        <span v-if="!editMode" class="font-mono text-text">{{ flow.branchAt || '–' }}</span>
-                        <InputText v-else v-model="flow.branchAt" placeholder="z.B. 2" class="w-20" />
+                        <span v-if="!editMode" class="font-mono text-text">{{ flow.afterStep || '–' }}</span>
+                        <InputText v-else v-model="flow.afterStep" placeholder="z.B. 2" class="w-20" />
                       </div>
                     </div>
                     <Button v-if="editMode" icon="pi pi-trash" text size="small" severity="danger" :title="t('useCase.actions.removeFlow')" @click="removeAlternativeFlow(flowIndex)" />
@@ -605,6 +648,8 @@ function onTagClick(name: string) {
                           :editable="editMode"
                           :terms="glossary.terms"
                           :placeholder="`${t('useCase.alternativeFlows')} A${flowIndex + 1}.${stepIndex + 1}`"
+                          :field="`altFlow.${flowIndex}.step.${stepIndex}`"
+                          @create-comment="onCreateComment"
                         />
                       </div>
                       <div v-if="editMode" class="flex flex-col gap-1">
@@ -633,6 +678,8 @@ function onTagClick(name: string) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.postcondition')"
+                  field="postcondition"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -672,15 +719,25 @@ function onTagClick(name: string) {
               </table>
             </section>
 
-            <!-- Secondary: description, context, acceptance criteria -->
-            <section class="space-y-6">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.description') }}</div>
-              <TiptapEditor
-                v-model="draft.description"
-                :editable="editMode"
-                :terms="glossary.terms"
-                :placeholder="t('useCase.description')"
-              />
+            <!-- Non-UC-2.0 fields -->
+            <section class="space-y-6 border-t border-border pt-6">
+              <div class="flex items-center gap-2">
+                <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.nonExportable') }}</div>
+              </div>
+
+              <div>
+                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.description') }}</label>
+                <div class="mt-2">
+                  <TiptapEditor
+                    v-model="draft.description"
+                    :editable="editMode"
+                    :terms="glossary.terms"
+                    :placeholder="t('useCase.description')"
+                    field="description"
+                    @create-comment="onCreateComment"
+                  />
+                </div>
+              </div>
 
               <div>
                 <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.context') }}</label>
@@ -690,6 +747,8 @@ function onTagClick(name: string) {
                     :editable="editMode"
                     :terms="glossary.terms"
                     :placeholder="t('useCase.context')"
+                    field="context"
+                    @create-comment="onCreateComment"
                   />
                 </div>
               </div>
@@ -702,7 +761,7 @@ function onTagClick(name: string) {
                     :disabled="!editMode"
                     rows="4"
                     class="w-full"
-                    :placeholder="t('useCase.acceptanceCriteria')"
+                    :placeholder="editMode ? t('useCase.acceptanceCriteria') : ''"
                   />
                 </div>
               </div>
@@ -714,21 +773,11 @@ function onTagClick(name: string) {
                 </div>
                 <div>
                   <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.module') }}</label>
-                  <Dropdown
+                  <Select
                     v-model="draft.moduleId"
                     :options="modulesStore.modules"
                     option-label="name"
                     option-value="id"
-                    class="w-full mt-1"
-                  />
-                </div>
-                <div>
-                  <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.classification') }}</label>
-                  <Dropdown
-                    v-model="draft.classification"
-                    :options="classificationOptions"
-                    option-label="label"
-                    option-value="value"
                     class="w-full mt-1"
                   />
                 </div>
@@ -739,7 +788,7 @@ function onTagClick(name: string) {
       </TabPanel>
 
       <TabPanel value="1" header="KI-Prüfung">
-        <AIReviewPanel :key="reviewTrigger" :review-fn="runReview" :on-ignore-warnings="onIgnoreWarnings" />
+        <AIReviewPanel :key="reviewTrigger" :auto-run="reviewTrigger > 0" :review-fn="runReview" :on-ignore-warnings="onIgnoreWarnings" />
       </TabPanel>
 
       <TabPanel value="2" header="Versionen">
@@ -747,7 +796,7 @@ function onTagClick(name: string) {
       </TabPanel>
 
       <TabPanel value="3" header="Kommentare">
-        <CommentList :requirement-id="id" />
+        <CommentList :requirement-id="id" v-model:pending-anchor="pendingAnchor" @jump="onCommentJump" />
       </TabPanel>
     </TabView>
 
@@ -755,6 +804,35 @@ function onTagClick(name: string) {
       <div class="space-y-3 min-w-96">
         <Textarea v-model="rejectReason" placeholder="Begründung" class="w-full" />
         <Button :label="t('useCase.actions.reject')" severity="danger" class="w-full" @click="reject" />
+      </div>
+    </Dialog>
+
+    <Dialog v-model:visible="showSubmitGate" header="KI-Prüfung" modal>
+      <div class="space-y-4 min-w-[28rem]" v-if="gateReview">
+        <div v-if="gateReview.result.blockers?.length" class="space-y-2">
+          <h4 class="font-display font-semibold text-glossary-alias">Blocker</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li v-for="(b, i) in gateReview.result.blockers" :key="`b-${i}`">
+              <strong>{{ b.field }}:</strong> {{ b.message }}
+              <span v-if="b.suggestion" class="text-sm text-text-muted">({{ b.suggestion }})</span>
+            </li>
+          </ul>
+        </div>
+        <div v-if="gateReview.result.warnings?.length" class="space-y-2">
+          <h4 class="font-display font-semibold text-status-in-review-fg">Warnungen</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li v-for="(w, i) in gateReview.result.warnings" :key="`w-${i}`">
+              <strong>{{ w.field }}:</strong> {{ w.message }}
+            </li>
+          </ul>
+          <div v-if="!gateReview.result.blockers?.length" class="space-y-2">
+            <Textarea v-model="gateIgnoreReason" placeholder="Begründung für das Ignorieren der Warnungen" rows="3" class="w-full" />
+            <Button label="Mit Begründung zur Freigabe" class="w-full" @click="confirmSubmitWithIgnore" />
+          </div>
+        </div>
+        <div v-if="gateReview.result.blockers?.length" class="flex justify-end">
+          <Button label="OK" @click="showSubmitGate = false" />
+        </div>
       </div>
     </Dialog>
   </div>

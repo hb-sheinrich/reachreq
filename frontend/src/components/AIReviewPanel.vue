@@ -20,13 +20,16 @@ interface ReviewResult {
 const props = defineProps<{
   reviewFn: () => Promise<{ result: ReviewResult; status: string }>
   onIgnoreWarnings?: (reason: string) => void
+  autoRun?: boolean
 }>()
 
 const result = ref<ReviewResult | null>(null)
 const loading = ref(false)
 const ignoreReason = ref('')
 
-onMounted(run)
+onMounted(() => {
+  if (props.autoRun) run()
+})
 
 async function run() {
   loading.value = true

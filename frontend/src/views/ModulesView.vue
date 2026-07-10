@@ -5,8 +5,9 @@ import { useAuthStore } from '@/stores/auth'
 import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
 import Textarea from 'primevue/textarea'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import Tree from 'primevue/tree'
 import Dialog from 'primevue/dialog'
 
@@ -16,7 +17,8 @@ const auth = useAuthStore()
 const showCreate = ref(false)
 const showEdit = ref(false)
 const editing = ref<Partial<Module>>({})
-const newModule = ref<Partial<Module>>({ code: '', name: '', description: '', parentId: null })
+const newModule = ref<Partial<Module>>({ code: '', name: '', description: '', parentId: null, sortOrder: 0 })
+const expandedKeys = ref<Record<string, boolean>>({})
 
 useTitle()
 
@@ -32,9 +34,10 @@ function asTreeNodes(nodes: any[]): any[] {
 }
 
 async function create() {
-  await store.createModule(newModule.value)
+  const payload = { ...newModule.value, sortOrder: newModule.value.sortOrder ?? 0 }
+  await store.createModule(payload)
   showCreate.value = false
-  newModule.value = { code: '', name: '', description: '', parentId: null }
+  newModule.value = { code: '', name: '', description: '', parentId: null, sortOrder: 0 }
 }
 
 function editNode(node: any) {
@@ -43,7 +46,9 @@ function editNode(node: any) {
 }
 
 async function saveEdit() {
-  await store.updateModule(editing.value.id!, editing.value)
+  const payload = { ...editing.value, sortOrder: editing.value.sortOrder ?? 0 }
+  if (payload.sortOrder == null) delete (payload as any).sortOrder
+  await store.updateModule(editing.value.id!, payload)
   showEdit.value = false
 }
 
@@ -59,7 +64,7 @@ async function remove(id: string) {
       <h1 class="text-h1 font-display font-semibold text-text">Module</h1>
       <Button v-if="auth.isAuthenticated" label="Neues Modul" icon="pi pi-plus" @click="showCreate = true" />
     </div>
-    <Tree :value="asTreeNodes(store.tree)" class="w-full">
+    <Tree v-model:expandedKeys="expandedKeys" :value="asTreeNodes(store.tree)" class="w-full">
       <template #default="{ node }">
         <div class="flex items-center justify-between w-full">
           <span class="text-text">{{ node.label }}</span>
@@ -76,7 +81,8 @@ async function remove(id: string) {
         <InputText v-model="newModule.name" placeholder="Name" class="w-full" />
         <InputText v-model="newModule.code" placeholder="Code (z.B. LOG)" class="w-full" />
         <Textarea v-model="newModule.description" placeholder="Beschreibung (optional)" rows="3" class="w-full" />
-        <Dropdown v-model="newModule.parentId" :options="[{ name: 'Kein Elternmodul', id: null }, ...store.modules]" option-label="name" option-value="id" placeholder="Elternmodul" class="w-full" />
+        <Select v-model="newModule.parentId" :options="[{ name: 'Kein Elternmodul', id: null }, ...store.modules]" option-label="name" option-value="id" placeholder="Elternmodul" class="w-full" />
+        <InputNumber v-model="newModule.sortOrder" placeholder="Sortierung" class="w-full" />
         <Button label="Erstellen" class="w-full" @click="create" />
       </div>
     </Dialog>
@@ -85,6 +91,9 @@ async function remove(id: string) {
       <div class="space-y-3 min-w-96">
         <InputText v-model="editing.name" placeholder="Name" class="w-full" />
         <InputText v-model="editing.code" placeholder="Code" class="w-full" />
+        <Textarea v-model="editing.description" placeholder="Beschreibung (optional)" rows="3" class="w-full" />
+        <Select v-model="editing.parentId" :options="[{ name: 'Kein Elternmodul', id: null }, ...store.modules]" option-label="name" option-value="id" placeholder="Elternmodul" class="w-full" />
+        <InputNumber v-model="editing.sortOrder" placeholder="Sortierung" class="w-full" />
         <Button label="Speichern" class="w-full" @click="saveEdit" />
       </div>
     </Dialog>

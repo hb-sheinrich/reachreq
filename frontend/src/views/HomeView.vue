@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRequirementsStore } from '@/stores/requirements'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useTitle } from '@/composables/useTitle'
 import DashboardTile from '@/components/DashboardTile.vue'
 
+const { t } = useI18n()
 const reqStore = useRequirementsStore()
 const glosStore = useGlossaryStore()
 const counts = ref({ draft: 0, inReview: 0, submitted: 0, approved: 0, glossary: 0 })
@@ -28,25 +30,25 @@ onMounted(async () => {
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'DRAFT' } }"
-      label="Entwürfe"
+      :label="t('dashboard.drafts')"
       :count="counts.draft"
       status="draft"
     />
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'IN_REVIEW' } }"
-      label="In Prüfung"
+      :label="t('dashboard.inReview')"
       :count="counts.inReview"
       status="in-review"
     />
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'SUBMITTED_FOR_RELEASE' } }"
-      label="Zur Freigabe"
+      :label="t('dashboard.submitted')"
       :count="counts.submitted"
       status="submitted"
     />
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'APPROVED' } }"
-      label="Freigegeben"
+      :label="t('dashboard.approved')"
       :count="counts.approved"
       status="approved"
     />
