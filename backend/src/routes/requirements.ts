@@ -60,7 +60,8 @@ async function checkAiReview(
   requirementId: string,
   aiReviewId: string | undefined,
   ignoreWarningsReason: string | undefined,
-  data: any
+  data: any,
+  authorId: string
 ) {
   if (!getEnv().ANTHROPIC_API_KEY) return { ok: true };
 
@@ -81,7 +82,7 @@ async function checkAiReview(
     review = await prisma.aIReview.create({
       data: {
         requirementId,
-        authorId: 'system',
+        authorId,
         status: 'COMPLETED',
         result: result as any,
       },
@@ -300,7 +301,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({ error: 'Requirement is not in an editable state' });
     }
 
-    const aiCheck = await checkAiReview(id, aiReviewId, ignoreWarningsReason, current);
+    const aiCheck = await checkAiReview(id, aiReviewId, ignoreWarningsReason, current, req.user.sub);
     if (!aiCheck.ok) {
       return reply.status(400).send({ error: aiCheck.message, aiReview: aiCheck.review });
     }

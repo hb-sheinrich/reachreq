@@ -39,7 +39,8 @@ async function checkAiReview(
   glossaryEntryId: string,
   aiReviewId: string | undefined,
   ignoreWarningsReason: string | undefined,
-  data: any
+  data: any,
+  authorId: string
 ) {
   if (!getEnv().ANTHROPIC_API_KEY) return { ok: true };
 
@@ -60,7 +61,7 @@ async function checkAiReview(
     review = await prisma.aIReview.create({
       data: {
         glossaryEntryId,
-        authorId: 'system',
+        authorId,
         status: 'COMPLETED',
         result: result as any,
       },
@@ -218,7 +219,7 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(403).send({ error: 'Only draft entries can be submitted' });
     }
 
-    const aiCheck = await checkAiReview(id, aiReviewId, ignoreWarningsReason, current);
+    const aiCheck = await checkAiReview(id, aiReviewId, ignoreWarningsReason, current, req.user.sub);
     if (!aiCheck.ok) {
       return reply.status(400).send({ error: aiCheck.message, aiReview: aiCheck.review });
     }

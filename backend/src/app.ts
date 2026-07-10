@@ -1,4 +1,6 @@
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import path from 'node:path';
 import { registerCors } from './plugins/cors.js';
 import { registerHelmet } from './plugins/helmet.js';
 import { registerRateLimit } from './plugins/rateLimit.js';
@@ -33,6 +35,21 @@ export async function buildApp() {
   await app.register(glossaryRoutes);
   await app.register(exportRoutes);
   await app.register(auditRoutes);
+
+  if (process.env.NODE_ENV === 'production') {
+    const publicDir = path.join(process.cwd(), 'public');
+    await app.register(fastifyStatic, {
+      root: publicDir,
+      prefix: '/',
+      wildcard: false,
+    });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith('/api')) {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return app;
 }

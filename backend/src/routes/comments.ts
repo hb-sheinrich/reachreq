@@ -4,6 +4,23 @@ import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
 
 export async function commentRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/comments', async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+    const where: any = { parentId: null };
+    if (query.requirementId) where.requirementId = query.requirementId;
+    if (query.glossaryEntryId) where.glossaryEntryId = query.glossaryEntryId;
+
+    const comments = await prisma.comment.findMany({
+      where,
+      include: {
+        author: { select: { id: true, name: true } },
+        replies: { include: { author: { select: { id: true, name: true } } } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { comments };
+  });
+
   app.get('/api/requirements/:id/comments', async (req, reply) => {
     const { id } = req.params as { id: string };
     const comments = await prisma.comment.findMany({

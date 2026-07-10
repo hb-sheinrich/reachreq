@@ -17,5 +17,16 @@ export function verifyToken(token: string): JwtPayload {
 }
 
 export function isAdminEmail(email: string): boolean {
-  return getAdminEmails().includes(email.toLowerCase());
+  const e = email.toLowerCase().trim();
+  for (const admin of getAdminEmails()) {
+    const a = admin.trim();
+    if (!a) continue;
+    if (a === e) return true;
+    // Support wildcard entries like *@hup.de
+    if (a.includes('@')) {
+      const [user, domain] = a.split('@');
+      if (user === '*' && e.endsWith(`@${domain}`)) return true;
+    }
+  }
+  return false;
 }

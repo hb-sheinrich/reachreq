@@ -12,6 +12,9 @@ async function authPlugin(app: FastifyInstance): Promise<void> {
   app.decorateRequest('user', null as unknown as JwtPayload);
 
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.url.startsWith('/api')) {
+      return;
+    }
     const publicRoutes = ['/api/health', '/api/auth/login', '/api/auth/callback', '/api/auth/token'];
     if (publicRoutes.some((r) => request.url.startsWith(r))) {
       return;

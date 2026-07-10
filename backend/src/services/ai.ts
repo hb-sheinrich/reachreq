@@ -42,7 +42,6 @@ export async function reviewRequirement(payload: ReviewPayload): Promise<ReviewR
     const response = await client().messages.create({
       model,
       max_tokens: 2048,
-      temperature: 0.2,
       system: 'Du bist ein Qualitätsmanager für Software-Anforderungen. Antworte ausschließlich in einem gültigen JSON-Format.',
       messages: [{ role: 'user', content: prompt }],
     });
