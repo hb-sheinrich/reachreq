@@ -360,6 +360,20 @@ const importModuleOptions = computed(() =>
           </span>
         </template>
       </Column>
+      <Column field="tags" :header="$t('requirements.tags')">
+        <template #body="{ data }">
+          <div class="flex flex-wrap gap-1">
+            <span
+              v-for="tag in data.tags || []"
+              :key="tag"
+              class="px-2 py-0.5 rounded-pill bg-surface-2 text-text-muted text-xs font-mono"
+            >
+              {{ tag }}
+            </span>
+            <span v-if="!(data.tags || []).length" class="text-text-subtle text-sm">–</span>
+          </div>
+        </template>
+      </Column>
       <Column field="author.name" :header="$t('app.author')" />
     </DataTable>
 
