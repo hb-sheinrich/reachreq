@@ -69,6 +69,7 @@ model User {
   authoredRequirements     Requirement[]
   authoredRequirementVersions RequirementVersion[]
   authoredComments         Comment[]
+  commentMentions          CommentMention[]
   authoredGlossaryEntries  GlossaryEntry[]
   authoredGlossaryVersions GlossaryVersion[]
   auditLogs                AuditLog[]
@@ -288,8 +289,20 @@ model Comment {
   author        User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
   parent        Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies       Comment[]     @relation("CommentReplies")
+  mentions      CommentMention[]
 
   @@map("comments")
+}
+
+model CommentMention {
+  id        String  @id @default(uuid())
+  commentId String  @map("comment_id")
+  userId    String  @map("user_id")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("comment_mentions")
 }
 
 model GlossaryEntry {

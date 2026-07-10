@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { BubbleMenu } from '@tiptap/vue-3/menus'
 import { Extension, type CommandProps } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -19,10 +20,12 @@ const props = defineProps<{
   editable?: boolean
   terms?: GlossaryTerm[]
   placeholder?: string
+  field?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
+  (e: 'createComment', anchor: { field: string; text: string; start: number; end: number }): void
 }>()
 
 const router = useRouter()
@@ -236,6 +239,19 @@ function hidePopover(event?: FocusEvent | MouseEvent) {
   }
 }
 
+function createCommentFromSelection() {
+  const editorInstance = editor.value
+  if (!editorInstance || !props.field) return
+  const { state } = editorInstance
+  const { from, to } = state.selection
+  if (from === to) return
+  const text = state.doc.textBetween(from, to, '\n')
+  const start = state.doc.textBetween(0, from, '\n').length
+  const end = start + text.length
+  emit('createComment', { field: props.field, text, start, end })
+  editorInstance.commands.blur()
+}
+
 const editor = useEditor({
   content: plainTextToTiptapHtml(props.modelValue || ''),
   editable: props.editable,
@@ -265,6 +281,9 @@ const editor = useEditor({
     GlossaryHighlight.configure({ terms: props.terms || [] }),
   ],
   editorProps: {
+    attributes: {
+      'data-field': props.field || '',
+    },
     handleDOMEvents: {
       mouseover: (view, event) => {
         const target = event.target as HTMLElement | null
@@ -344,6 +363,21 @@ watch(
 <template>
   <div>
     <editor-content :editor="editor" :class="editorClasses" />
+    <BubbleMenu
+      v-if="editor && field"
+      :editor="editor"
+      :options="{ placement: 'top' }"
+    >
+      <div class="flex items-center gap-1 rounded-field bg-surface border border-border shadow-lg px-2 py-1">
+        <Button
+          icon="pi pi-comment"
+          :label="t('useCase.comment.create')"
+          size="small"
+          text
+          @click="createCommentFromSelection"
+        />
+      </div>
+    </BubbleMenu>
     <span id="glossary-description" class="sr-only">{{ definedTerm.definition }}</span>
     <Popover ref="definedPopover" class="glossary-popover">
       <template v-if="definedTerm.term">

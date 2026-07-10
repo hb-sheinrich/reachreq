@@ -6,6 +6,18 @@ export const messages = {
       createOption: "'{name}' anlegen",
       create: 'Tag anlegen',
     },
+    comment: {
+      title: 'Kommentare',
+      placeholder: 'Kommentar schreiben...',
+      submit: 'Senden',
+      reply: 'Antworten',
+      cancelReply: 'Abbrechen',
+      resolve: 'Erledigt',
+      reopen: 'Wieder öffnen',
+      replyingTo: 'Antwort an {name}',
+      anchorHint: 'Textstelle: {field}',
+      empty: 'Keine Kommentare.',
+    },
     app: {
       title: 'ReachReq — Anforderungen & Glossar',
       dashboard: 'Dashboard',
@@ -197,6 +209,18 @@ export const messages = {
     tag: {
       createOption: "Create '{name}'",
       create: 'Create tag',
+    },
+    comment: {
+      title: 'Comments',
+      placeholder: 'Write a comment...',
+      submit: 'Send',
+      reply: 'Reply',
+      cancelReply: 'Cancel',
+      resolve: 'Resolve',
+      reopen: 'Reopen',
+      replyingTo: 'Replying to {name}',
+      anchorHint: 'Text anchor: {field}',
+      empty: 'No comments yet.',
     },
     glossary: {
       title: 'Glossary',

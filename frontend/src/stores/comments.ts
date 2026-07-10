@@ -2,12 +2,23 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/services/api'
 
+export interface Mention {
+  user: { id: string; name: string; email: string }
+}
+
+export interface TextAnchor {
+  field: string
+  text: string
+  start: number
+  end: number
+}
+
 export interface Comment {
   id: string
   requirementId?: string
   glossaryEntryId?: string
   versionId?: string
-  textAnchor?: any
+  textAnchor?: TextAnchor | null
   content: string
   authorId: string
   status: 'OPEN' | 'RESOLVED'
@@ -16,6 +27,7 @@ export interface Comment {
   updatedAt: string
   author?: { id: string; name: string }
   replies?: Comment[]
+  mentions?: Mention[]
 }
 
 export const useCommentsStore = defineStore('comments', () => {
@@ -42,17 +54,43 @@ export const useCommentsStore = defineStore('comments', () => {
     return data.comment
   }
 
+  function updateCommentInTree(list: Comment[], id: string, patch: Partial<Comment>): boolean {
+    for (const c of list) {
+      if (c.id === id) {
+        Object.assign(c, patch)
+        return true
+      }
+      if (c.replies?.length && updateCommentInTree(c.replies, id, patch)) return true
+    }
+    return false
+  }
+
   async function resolveComment(id: string) {
     const data = await api.patch(`/comments/${id}`, { status: 'RESOLVED' })
-    const c = comments.value.find((x) => x.id === id)
-    if (c) c.status = 'RESOLVED'
+    updateCommentInTree(comments.value, id, data.comment)
     return data.comment
+  }
+
+  async function reopenComment(id: string) {
+    const data = await api.patch(`/comments/${id}`, { status: 'OPEN' })
+    updateCommentInTree(comments.value, id, data.comment)
+    return data.comment
+  }
+
+  function removeCommentFromTree(list: Comment[], id: string): Comment[] {
+    return list.filter((c) => {
+      if (c.id === id) return false
+      if (c.replies?.length) {
+        c.replies = removeCommentFromTree(c.replies, id)
+      }
+      return true
+    })
   }
 
   async function deleteComment(id: string) {
     await api.delete(`/comments/${id}`)
-    comments.value = comments.value.filter((c) => c.id !== id)
+    comments.value = removeCommentFromTree(comments.value, id)
   }
 
-  return { comments, loading, fetchComments, createComment, resolveComment, deleteComment }
+  return { comments, loading, fetchComments, createComment, resolveComment, reopenComment, deleteComment }
 })

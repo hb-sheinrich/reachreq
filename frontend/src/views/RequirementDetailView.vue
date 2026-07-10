@@ -48,6 +48,7 @@ const jiraLoading = ref(false)
 const importLoading = ref(false)
 const importError = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+const pendingAnchor = ref<{ field: string; text: string; start: number; end: number } | null>(null)
 
 useTitle(computed(() => store.current?.humanReadableId || ''))
 
@@ -224,6 +225,23 @@ async function rollback() {
 async function onReview(payload: { reviewedByCe?: boolean; reviewedByAscShe?: boolean }) {
   await store.setReview(id.value, payload)
   await store.fetchVersions(id.value)
+}
+
+function onCreateComment(anchor: { field: string; text: string; start: number; end: number }) {
+  pendingAnchor.value = anchor
+  activeTab.value = 3
+}
+
+function onCommentJump(anchor: { field: string; text: string; start: number; end: number }) {
+  activeTab.value = 0
+  nextTick(() => {
+    const selector = `[data-field="${anchor.field}"] .ProseMirror`
+    const el = document.querySelector(selector) as HTMLElement | null
+    if (el) {
+      el.focus()
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
 }
 
 async function onCreateJira() {
@@ -504,6 +522,8 @@ function removeAppendixEntry(index: number) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.goal')"
+                  field="goal"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -517,6 +537,8 @@ function removeAppendixEntry(index: number) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.precondition')"
+                  field="precondition"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -540,6 +562,8 @@ function removeAppendixEntry(index: number) {
                       :editable="editMode"
                       :terms="glossary.terms"
                       :placeholder="`${t('useCase.mainFlow')} ${index + 1}`"
+                      :field="`mainFlow.${index}`"
+                      @create-comment="onCreateComment"
                     />
                   </div>
                   <div v-if="editMode" class="flex flex-col gap-1">
@@ -590,6 +614,8 @@ function removeAppendixEntry(index: number) {
                           :editable="editMode"
                           :terms="glossary.terms"
                           :placeholder="`${t('useCase.alternativeFlows')} A${flowIndex + 1}.${stepIndex + 1}`"
+                          :field="`altFlow.${flowIndex}.step.${stepIndex}`"
+                          @create-comment="onCreateComment"
                         />
                       </div>
                       <div v-if="editMode" class="flex flex-col gap-1">
@@ -618,6 +644,8 @@ function removeAppendixEntry(index: number) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.postcondition')"
+                  field="postcondition"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -671,6 +699,8 @@ function removeAppendixEntry(index: number) {
                     :editable="editMode"
                     :terms="glossary.terms"
                     :placeholder="t('useCase.description')"
+                    field="description"
+                    @create-comment="onCreateComment"
                   />
                 </div>
               </div>
@@ -683,6 +713,8 @@ function removeAppendixEntry(index: number) {
                     :editable="editMode"
                     :terms="glossary.terms"
                     :placeholder="t('useCase.context')"
+                    field="context"
+                    @create-comment="onCreateComment"
                   />
                 </div>
               </div>
@@ -730,7 +762,7 @@ function removeAppendixEntry(index: number) {
       </TabPanel>
 
       <TabPanel value="3" header="Kommentare">
-        <CommentList :requirement-id="id" />
+        <CommentList :requirement-id="id" v-model:pending-anchor="pendingAnchor" @jump="onCommentJump" />
       </TabPanel>
     </TabView>
 

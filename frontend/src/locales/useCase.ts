@@ -79,6 +79,9 @@ export const useCaseMessages = {
         title: 'Glossarbegriff',
         link: 'Zum Glossar',
       },
+      comment: {
+        create: 'Kommentar',
+      },
     },
   },
   en: {
@@ -160,6 +163,9 @@ export const useCaseMessages = {
       glossaryPopover: {
         title: 'Glossary term',
         link: 'Open glossary',
+      },
+      comment: {
+        create: 'Comment',
       },
     },
   },
