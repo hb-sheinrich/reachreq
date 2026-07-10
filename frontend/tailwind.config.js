@@ -28,6 +28,26 @@ export default {
         },
         link: 'var(--link)',
         focus: 'var(--focus)',
+        status: {
+          draft: { fg: 'var(--status-draft-fg)', bg: 'var(--status-draft-bg)' },
+          'in-review': { fg: 'var(--status-in-review-fg)', bg: 'var(--status-in-review-bg)' },
+          submitted: { fg: 'var(--status-submitted-fg)', bg: 'var(--status-submitted-bg)' },
+          approved: { fg: 'var(--status-approved-fg)', bg: 'var(--status-approved-bg)' },
+          rejected: { fg: 'var(--status-rejected-fg)', bg: 'var(--status-rejected-bg)' },
+          postponed: { fg: 'var(--status-postponed-fg)', bg: 'var(--status-postponed-bg)' },
+          archived: { fg: 'var(--status-archived-fg)', bg: 'var(--status-archived-bg)' },
+        },
+        classification: {
+          must: { fg: 'var(--classification-must-fg)', bg: 'var(--classification-must-bg)' },
+          should: { fg: 'var(--classification-should-fg)', bg: 'var(--classification-should-bg)' },
+          could: { fg: 'var(--classification-could-fg)', bg: 'var(--classification-could-bg)' },
+          nice: { fg: 'var(--classification-nice-fg)', bg: 'var(--classification-nice-bg)' },
+          wont: { fg: 'var(--classification-wont-fg)', bg: 'var(--classification-wont-bg)' },
+        },
+        glossary: {
+          defined: 'var(--glossary-defined)',
+          alias: 'var(--glossary-alias)',
+        },
       },
       fontFamily: {
         display: 'var(--font-display)',

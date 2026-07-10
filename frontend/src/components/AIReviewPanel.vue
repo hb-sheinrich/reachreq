@@ -46,23 +46,25 @@ function ignore() {
 </script>
 
 <template>
-  <Card>
-    <template #title>KI-Qualitätsprüfung</template>
+  <Card pt:root="bg-surface border border-border rounded-card shadow-sm">
+    <template #title>
+      <span class="font-display font-semibold text-h2">KI-Qualitätsprüfung</span>
+    </template>
     <template #content>
-      <div v-if="loading" class="text-sm text-gray-600">Prüfe...</div>
+      <div v-if="loading" class="text-sm text-text-muted">Prüfe...</div>
       <div v-else-if="result" class="space-y-4">
-        <div v-if="result.blockers.length" class="text-red-700">
-          <h4 class="font-bold">Blocker</h4>
-          <ul class="list-disc pl-5">
+        <div v-if="result.blockers.length" class="text-text">
+          <h4 class="font-display font-semibold text-glossary-alias mb-1">Blocker</h4>
+          <ul class="list-disc pl-5 space-y-1">
             <li v-for="(b, i) in result.blockers" :key="`b-${i}`">
               <strong>{{ b.field }}:</strong> {{ b.message }}
-              <span v-if="b.suggestion" class="text-sm text-gray-600">({{ b.suggestion }})</span>
+              <span v-if="b.suggestion" class="text-sm text-text-muted">({{ b.suggestion }})</span>
             </li>
           </ul>
         </div>
-        <div v-if="result.warnings.length" class="text-yellow-700">
-          <h4 class="font-bold">Warnungen</h4>
-          <ul class="list-disc pl-5">
+        <div v-if="result.warnings.length" class="text-text">
+          <h4 class="font-display font-semibold text-status-in-review-fg mb-1">Warnungen</h4>
+          <ul class="list-disc pl-5 space-y-1">
             <li v-for="(w, i) in result.warnings" :key="`w-${i}`">
               <strong>{{ w.field }}:</strong> {{ w.message }}
             </li>
@@ -72,13 +74,13 @@ function ignore() {
             <Button label="Ignorieren" size="small" @click="ignore" />
           </div>
         </div>
-        <div v-if="result.suggestions.length" class="text-blue-700">
-          <h4 class="font-bold">Vorschläge</h4>
-          <ul class="list-disc pl-5">
+        <div v-if="result.suggestions.length" class="text-text">
+          <h4 class="font-display font-semibold text-link mb-1">Vorschläge</h4>
+          <ul class="list-disc pl-5 space-y-1">
             <li v-for="(s, i) in result.suggestions" :key="`s-${i}`">{{ s.message }}</li>
           </ul>
         </div>
-        <div v-if="!result.blockers.length && !result.warnings.length && !result.suggestions.length" class="text-green-700">
+        <div v-if="!result.blockers.length && !result.warnings.length && !result.suggestions.length" class="text-accent">
           Keine Hinweise gefunden.
         </div>
       </div>

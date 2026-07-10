@@ -8,6 +8,63 @@ body {
   @apply bg-bg text-text font-body antialiased;
 }
 
+.ProseMirror {
+  min-height: 5rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  outline: none;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.ProseMirror:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.editor-content.view-mode .ProseMirror {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-h2);
+  min-height: auto;
+}
+
+.editor-content.view-mode .ProseMirror:focus {
+  box-shadow: none;
+}
+
+.ProseMirror.is-editor-empty::before {
+  color: var(--text-subtle);
+  opacity: 0.6;
+}
+
+.glossary-defined {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--glossary-defined);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.glossary-defined:hover,
+.glossary-defined:focus {
+  background: color-mix(in srgb, var(--glossary-defined) 10%, transparent);
+  outline: none;
+}
+
+.glossary-alias {
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--glossary-alias);
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
