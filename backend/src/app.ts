@@ -22,7 +22,7 @@ export async function buildApp() {
     logger: {
       level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     },
-    trustProxy: 2,
+    trustProxy: true,
     bodyLimit: 5 * 1024 * 1024,
   });
 
@@ -44,13 +44,17 @@ export async function buildApp() {
   await app.register(auditRoutes);
 
   app.setErrorHandler((err, _req, reply) => {
+    const statusCode = (err as any).statusCode || 500;
     if (process.env.NODE_ENV === 'production') {
       app.log.error(err);
-      return reply.status(500).send({ error: 'Internal Server Error' });
+      if (statusCode >= 500) {
+        return reply.status(statusCode).send({ error: 'Internal Server Error' });
+      }
+      return reply.status(statusCode).send({ error: (err as any).message || 'Internal Server Error' });
     }
     const message = err instanceof Error ? err.message : 'Internal Server Error';
     const stack = err instanceof Error ? err.stack : undefined;
-    return reply.status(500).send({ error: message, stack });
+    return reply.status(statusCode).send({ error: message, stack });
   });
 
   if (process.env.NODE_ENV === 'production') {

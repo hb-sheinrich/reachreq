@@ -33,7 +33,9 @@ async function request(method: string, path: string, body?: unknown, options?: R
 
   if (res.status === 401) {
     auth.logout()
-    window.location.href = '/login'
+    if (auth.token && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login'
+    }
   }
 
   const contentType = res.headers.get('content-type') || ''
