@@ -126,7 +126,7 @@ function submit() {
   if (!trimmed) return
   const payload: CommentComposerPayload = {
     content: trimmed,
-    textAnchor: props.textAnchor,
+    textAnchor: props.textAnchor || undefined,
     mentions: [],
   }
   emit('submit', payload)

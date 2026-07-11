@@ -167,6 +167,11 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const data = parsed.data;
 
+    if (data.moduleId) {
+      const moduleExists = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } });
+      if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+    }
+
     const error = await validateGlossaryAliases(data.aliases);
     if (error) return reply.status(400).send({ error });
 
@@ -237,6 +242,11 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const data = parsed.data;
+
+    if (data.moduleId) {
+      const moduleExists = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } });
+      if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+    }
 
     const current = await prisma.glossaryEntry.findUnique({ where: { id } });
     if (!current) return reply.status(404).send({ error: 'Glossary entry not found' });

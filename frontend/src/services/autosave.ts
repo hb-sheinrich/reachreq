@@ -11,6 +11,7 @@ export function useAutosave<T extends Record<string, unknown>>(
   const statusMessage = ref('')
   let timer: number | null = null
   let lastData: string | undefined = undefined
+  let readyRef: Ref<boolean> | undefined
   const DEBOUNCE_MS = 2000
 
   function serialize(data: T): string {
@@ -53,6 +54,7 @@ export function useAutosave<T extends Record<string, unknown>>(
   }
 
   async function save(targetId?: string) {
+    if (readyRef && !readyRef.value) return
     const currentId = targetId || id.value
     const data = getter()
     const serialized = serialize(data)
@@ -97,6 +99,7 @@ export function useAutosave<T extends Record<string, unknown>>(
   }
 
   function setupWatch(source: any, ready?: Ref<boolean>) {
+    readyRef = ready
     const handleChange = () => {
       if (ready && !ready.value) {
         return
@@ -112,6 +115,7 @@ export function useAutosave<T extends Record<string, unknown>>(
       })
     }
     const beforeUnload = () => {
+      if (ready && !ready.value) return
       if (status.value === 'saving' || status.value === 'idle') {
         saveDraft(id.value, getter())
       }

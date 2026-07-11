@@ -273,6 +273,8 @@ const editor = useEditor({
       code: false,
       bold: false,
       italic: false,
+      link: false,
+      underline: false,
     }),
     Underline,
     Link.configure({

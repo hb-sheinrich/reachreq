@@ -8,8 +8,8 @@ export function getRedis(): Redis {
     _redis = new Redis(getEnv().REDIS_URL, {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
-      connectTimeout: 500,
-      commandTimeout: 1000,
+      connectTimeout: 5000,
+      commandTimeout: 5000,
       lazyConnect: true,
     });
   }

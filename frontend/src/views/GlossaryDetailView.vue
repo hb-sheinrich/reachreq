@@ -98,8 +98,8 @@ function payload() {
     term: draft.value.term,
     definition: draft.value.definition,
     example: draft.value.example || null,
-    tags: draft.value.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
-    aliases: (draft.value.aliases || []).map((a: string) => a.trim()).filter(Boolean),
+    tags: (draft.value?.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean),
+    aliases: ((draft.value?.aliases || []) as string[]).map((a: string) => a.trim()).filter(Boolean),
     originalLanguage: draft.value.originalLanguage,
     moduleId: draft.value.moduleId || null,
   }

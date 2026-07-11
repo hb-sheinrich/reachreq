@@ -134,6 +134,14 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
     const rows = parsed.data;
+    if (rows.length === 0) {
+      return reply.status(400).send({ error: 'No rows to import' });
+    }
+    const firstModuleId = rows.find((r) => r.moduleId)?.moduleId;
+    if (firstModuleId) {
+      const moduleExists = await prisma.module.findUnique({ where: { id: firstModuleId }, select: { id: true } });
+      if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+    }
     const created = [];
     for (const row of rows) {
       const moduleId = row.moduleId;

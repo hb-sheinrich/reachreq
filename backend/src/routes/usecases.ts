@@ -183,6 +183,9 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
 
     const { moduleId, classification, targetLanguage, useCases: ucs } = parsed.data;
 
+    const moduleExists = await prisma.module.findUnique({ where: { id: moduleId }, select: { id: true } });
+    if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+
     const originalLanguage = targetLanguage === 'en' ? 'de' : 'de';
 
     const created = await prisma.$transaction(async (tx) => {

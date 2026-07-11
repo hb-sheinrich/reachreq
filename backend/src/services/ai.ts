@@ -47,7 +47,7 @@ export async function reviewRequirement(payload: ReviewPayload): Promise<ReviewR
     const response = await client().messages.create(
       {
         model,
-        max_tokens: 2048,
+        max_tokens: 4096,
         system: 'Du bist ein Qualitätsmanager für Software-Anforderungen. Antworte ausschließlich in einem gültigen JSON-Format.',
         messages: [{ role: 'user', content: prompt }],
       },
@@ -121,9 +121,35 @@ suggestions: Optionale Verbesserungsvorschläge.
 `;
 }
 
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    if (text[i] === '}') depth--;
+    if (depth === 0) return text.slice(start, i + 1);
+  }
+  return null;
+}
+
 function parseReviewResult(text: string): ReviewResult {
   const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-  const parsed = JSON.parse(cleaned);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const extracted = extractJsonObject(cleaned);
+    if (extracted) {
+      try {
+        parsed = JSON.parse(extracted);
+      } catch {
+        throw new Error('AI response is not valid JSON');
+      }
+    } else {
+      throw new Error('AI response is not valid JSON');
+    }
+  }
   const blockers = Array.isArray(parsed.blockers) ? parsed.blockers : [];
   const warnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
   const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];

@@ -229,6 +229,11 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const data = parsed.data;
 
+    const moduleExists = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } });
+    if (!moduleExists) {
+      return reply.status(400).send({ error: 'Module not found' });
+    }
+
     const requirement = await prisma.$transaction(async (tx) => {
       const module = await tx.module.update({
         where: { id: data.moduleId },
@@ -328,6 +333,11 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const data = parsed.data;
+
+    if (data.moduleId) {
+      const moduleExists = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } });
+      if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+    }
 
     const current = await prisma.requirement.findUnique({
       where: { id },

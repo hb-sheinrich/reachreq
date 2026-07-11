@@ -11,6 +11,7 @@ import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
 import './style.css'
+import { useAuthStore } from './stores/auth'
 
 const ReachReqPreset = definePreset(Aura, {
   semantic: {
@@ -66,17 +67,21 @@ const ReachReqPreset = definePreset(Aura, {
 const app = createApp(App)
 
 app.use(createPinia())
-app.use(router)
-app.use(i18n)
-app.use(PrimeVue, {
-  theme: {
-    preset: ReachReqPreset,
-    options: {
-      darkModeSelector: 'html[data-theme="dark"]',
-    },
-  },
-})
-app.use(ToastService)
-app.use(ConfirmationService)
+const auth = useAuthStore()
 
-app.mount('#app')
+auth.fetchUser().then(() => {
+  app.use(router)
+  app.use(i18n)
+  app.use(PrimeVue, {
+    theme: {
+      preset: ReachReqPreset,
+      options: {
+        darkModeSelector: 'html[data-theme="dark"]',
+      },
+    },
+  })
+  app.use(ToastService)
+  app.use(ConfirmationService)
+
+  app.mount('#app')
+})
