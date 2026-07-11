@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { useCaseMessages } from '../locales/useCase'
 
 export const messages = {
   de: {
@@ -64,16 +65,10 @@ export const messages = {
       ARCHIVED: 'Archiviert',
     },
     classification: {
-      MUST_HAVE: 'Must have',
-      SHOULD_HAVE: 'Should have',
-      NICE_TO_HAVE: 'Nice to have',
-      WONT_HAVE: "Won't have",
-    },
-    dashboard: {
-      drafts: 'Entwürfe',
-      inReview: 'In Prüfung',
-      submitted: 'Zur Freigabe',
-      approved: 'Freigegeben',
+      MUST_HAVE: 'Muss',
+      SHOULD_HAVE: 'Soll',
+      NICE_TO_HAVE: 'Kann',
+      WONT_HAVE: 'Wird nicht',
     },
     requirements: {
       title: 'Anforderungen',
@@ -125,6 +120,7 @@ export const messages = {
       translationError: 'Übersetzung fehlgeschlagen',
       translationSameLanguage: 'Zielsprache entspricht der Ursprungssprache',
     },
+    useCase: useCaseMessages.de.useCase,
   },
   en: {
     app: {
@@ -176,12 +172,6 @@ export const messages = {
       SHOULD_HAVE: 'Should have',
       NICE_TO_HAVE: 'Nice to have',
       WONT_HAVE: "Won't have",
-    },
-    dashboard: {
-      drafts: 'Drafts',
-      inReview: 'In Review',
-      submitted: 'Ready for Approval',
-      approved: 'Approved',
     },
     requirements: {
       title: 'Requirements',
@@ -249,6 +239,7 @@ export const messages = {
       translationError: 'Translation failed',
       translationSameLanguage: 'Target language equals original language',
     },
+    useCase: useCaseMessages.en.useCase,
   },
 }
 

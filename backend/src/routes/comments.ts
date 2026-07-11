@@ -1,7 +1,8 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
+import { requireWrite } from '../lib/auth.js';
 
 const mentionRegex = /@([^\s@]+(?:\s[^\s@]+)?)/g;
 
@@ -28,17 +29,22 @@ const commentUpdateSchema = z.object({
 
 const authorSelect = { select: { id: true, name: true } };
 const mentionInclude = { include: { user: { select: { id: true, name: true, email: true } } } };
-const replyInclude = {
-  author: authorSelect,
-  mentions: mentionInclude,
-  replies: {
-    include: {
-      author: authorSelect,
-      mentions: mentionInclude,
+
+function buildReplyInclude(depth: number): any {
+  if (depth <= 0) {
+    return { author: authorSelect, mentions: mentionInclude };
+  }
+  return {
+    author: authorSelect,
+    mentions: mentionInclude,
+    replies: {
+      include: buildReplyInclude(depth - 1),
+      orderBy: { createdAt: 'asc' as const },
     },
-    orderBy: { createdAt: 'asc' as const },
-  },
-};
+  };
+}
+
+const replyInclude = buildReplyInclude(3);
 
 function buildWhere(query: Record<string, string | undefined>) {
   const where: any = {};
@@ -119,6 +125,8 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/comments', async (req, reply) => {
+    if (!requireWrite(req as FastifyRequest, reply as FastifyReply)) return;
+
     const parsed = commentCreateSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 

@@ -4,18 +4,11 @@ import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
 import { reviewRequirement } from '../services/ai.js';
 import { getEnv } from '../lib/env.js';
+import { requireWrite, requireAdmin, isAscSheReviewer } from '../lib/auth.js';
 import { upsertRequirementTags } from '../services/tags.js';
 import { createRequirementVersion } from '../services/versions.js';
 import { createJiraIssue, buildUseCaseDescription } from '../services/jira.js';
 import { translateUseCase, type UseCase, type UseCaseTranslation } from '../services/translation.js';
-
-function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  if (!req.user.isAdmin) {
-    reply.status(403).send({ error: 'Admin permission required' });
-    return false;
-  }
-  return true;
-}
 
 function isEditable(status: string) {
   return status === 'DRAFT' || status === 'IN_REVIEW';
@@ -131,11 +124,19 @@ async function checkAiReview(
   data: any,
   authorId: string
 ) {
-  if (!getEnv().ANTHROPIC_API_KEY) return { ok: true };
+  if (!getEnv().ANTHROPIC_API_KEY) {
+    if (getEnv().NODE_ENV === 'test') return { ok: true };
+    return { ok: false, message: 'KI-Prüfung nicht verfügbar' };
+  }
 
   let review = null;
   if (aiReviewId) {
-    review = await prisma.aIReview.findUnique({ where: { id: aiReviewId } });
+    review = await prisma.aIReview.findFirst({
+      where: { id: aiReviewId, requirementId, status: 'COMPLETED' },
+    });
+    if (!review) {
+      return { ok: false, message: 'KI-Prüfung nicht gültig oder veraltet' };
+    }
   }
 
   if (!review) {
@@ -159,6 +160,10 @@ async function checkAiReview(
 
   if (review.status === 'FAILED' || !review.result) {
     return { ok: false, message: 'KI-Prüfung fehlgeschlagen' };
+  }
+
+  if (data.updatedAt && review.createdAt && new Date(data.updatedAt).getTime() > new Date(review.createdAt).getTime() + 1000) {
+    return { ok: false, message: 'Anforderung wurde nach der KI-Prüfung geändert. Bitte führe die Prüfung erneut durch.', review };
   }
 
   const result = review.result as { passed?: boolean; blockers?: unknown[]; warnings?: unknown[] };
@@ -200,6 +205,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const schema = z.object({
       moduleId: z.string(),
       title: z.string().min(1),
@@ -208,7 +215,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       acceptanceCriteria: z.array(z.string()).default([]),
       classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).default('MUST_HAVE'),
       source: z.string().optional(),
-      status: z.enum(['DRAFT', 'IN_REVIEW']).default('DRAFT'),
       tags: z.array(z.string()).default([]),
       category: z.string().optional(),
       goal: z.string().optional(),
@@ -251,7 +257,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           technicalAppendix: data.technicalAppendix as any,
           classification: data.classification,
           source: data.source,
-          status: data.status,
+          status: 'DRAFT',
           originalLanguage: data.originalLanguage,
           authorId: req.user.sub,
         },
@@ -303,6 +309,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch('/api/requirements/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({
       title: z.string().min(1).optional(),
@@ -312,7 +320,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).optional(),
       source: z.string().optional().nullable(),
       moduleId: z.string().optional(),
-      status: z.enum(['DRAFT', 'IN_REVIEW']).optional(),
       editVersion: z.number(),
       tags: z.array(z.string()).optional(),
       category: z.string().optional().nullable(),
@@ -327,8 +334,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       })).optional(),
       technicalAppendix: z.record(z.unknown()).optional().nullable(),
       originalLanguage: z.enum(['de', 'en']).optional(),
-      reviewedByCe: z.boolean().optional(),
-      reviewedByAscShe: z.boolean().optional(),
     });
 
     const parsed = schema.safeParse(req.body);
@@ -342,12 +347,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     if (!current) return reply.status(404).send({ error: 'Requirement not found' });
     if (!isEditable(current.status)) {
       return reply.status(403).send({ error: 'Requirement is frozen or submitted and cannot be edited directly' });
-    }
-
-    const userEmail = req.user.email.toLowerCase();
-    const ASC_SHE_ALLOWED = ['alexander.schulz@hup.de', 'simon.heinrich@hup.de'];
-    if (data.reviewedByAscShe !== undefined && !ASC_SHE_ALLOWED.includes(userEmail)) {
-      return reply.status(403).send({ error: 'Not allowed to set ASC/SHE review' });
     }
 
     const { editVersion, tags: requestedTags, ...rest } = data;
@@ -416,6 +415,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/edit', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const current = await prisma.requirement.findUnique({
       where: { id },
@@ -482,6 +483,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/submit', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({
       changeComment: z.string().optional(),
@@ -524,13 +527,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
 
         if (updatedCount.count === 0) {
           throw new Error('Conflict');
-        }
-
-        if (aiCheck.review?.id) {
-          await tx.aIReview.updateMany({
-            where: { id: aiCheck.review.id },
-            data: { requirementId: current.id },
-          });
         }
 
         return tx.requirement.findUnique({
@@ -682,6 +678,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/rollback', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({ versionId: z.string() });
     const parsed = schema.safeParse(req.body);
@@ -776,6 +774,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/reviews', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({
       reviewedByCe: z.boolean().optional(),
@@ -786,18 +786,19 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const { reviewedByCe, reviewedByAscShe } = parsed.data;
 
-    const userEmail = req.user.email.toLowerCase();
-    const ASC_SHE_ALLOWED = ['alexander.schulz@hup.de', 'simon.heinrich@hup.de'];
-
-    if (reviewedByAscShe !== undefined && !ASC_SHE_ALLOWED.includes(userEmail)) {
-      return reply.status(403).send({ error: 'Not allowed to set ASC/SHE review' });
-    }
-
     const current = await prisma.requirement.findUnique({
       where: { id },
-      include: { tags: { include: { tag: { select: { name: true } } } } },
+      include: { author: { select: { id: true } }, tags: { include: { tag: { select: { name: true } } } } },
     });
     if (!current) return reply.status(404).send({ error: 'Requirement not found' });
+
+    if (req.user.sub === current.authorId) {
+      return reply.status(403).send({ error: 'Reviewer cannot be the author' });
+    }
+
+    if (reviewedByAscShe !== undefined && !isAscSheReviewer(req.user.email)) {
+      return reply.status(403).send({ error: 'Not allowed to set ASC/SHE review' });
+    }
 
     const updateData: any = {};
     if (reviewedByCe !== undefined) {
@@ -859,9 +860,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/jira-ticket', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!req.user.isAdmin) {
-      return reply.status(403).send({ error: 'Admin permission required' });
-    }
+    if (!requireAdmin(req, reply)) return;
 
     const { id } = req.params as { id: string };
     const current = await prisma.requirement.findUnique({
@@ -934,6 +933,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/translate', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({ targetLanguage: z.enum(['de', 'en']) });
     const parsed = schema.safeParse(req.body);
@@ -988,6 +989,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/ai-review', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const current = await prisma.requirement.findUnique({ where: { id } });
     if (!current) return reply.status(404).send({ error: 'Requirement not found' });
@@ -1057,6 +1060,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/links', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({ toId: z.string(), type: z.enum(['DEPENDENCY', 'CONFLICT', 'DUPLICATE', 'RELATED']) });
     const parsed = schema.safeParse(req.body);
@@ -1080,6 +1085,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete('/api/requirements/:id/links/:linkId', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { linkId } = req.params as { linkId: string };
     const link = await prisma.requirementLink.findUnique({ where: { id: linkId } });
     if (!link) return reply.status(404).send({ error: 'Link not found' });
@@ -1099,6 +1106,8 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/glossary-links', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({ glossaryEntryIds: z.array(z.string()) });
     const parsed = schema.safeParse(req.body);

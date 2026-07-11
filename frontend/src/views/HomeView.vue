@@ -30,25 +30,25 @@ onMounted(async () => {
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'DRAFT' } }"
-      :label="t('dashboard.drafts')"
+      :label="t('status.DRAFT')"
       :count="counts.draft"
       status="draft"
     />
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'IN_REVIEW' } }"
-      :label="t('dashboard.inReview')"
+      :label="t('status.IN_REVIEW')"
       :count="counts.inReview"
       status="in-review"
     />
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'SUBMITTED_FOR_RELEASE' } }"
-      :label="t('dashboard.submitted')"
+      :label="t('status.SUBMITTED_FOR_RELEASE')"
       :count="counts.submitted"
       status="submitted"
     />
     <DashboardTile
       :to="{ name: 'Requirements', query: { status: 'APPROVED' } }"
-      :label="t('dashboard.approved')"
+      :label="t('status.APPROVED')"
       :count="counts.approved"
       status="approved"
     />

@@ -8,5 +8,6 @@ export async function registerRateLimit(app: FastifyInstance): Promise<void> {
     timeWindow: '1 minute',
     redis: getRedis(),
     allowList: (req) => req.url === '/api/health',
+    skipOnError: true,
   });
 }

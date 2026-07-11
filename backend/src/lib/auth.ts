@@ -29,15 +29,20 @@ export function isAdminEmail(email: string): boolean {
   const e = email.toLowerCase().trim();
   for (const admin of getAdminEmails()) {
     const a = admin.trim();
-    if (!a) continue;
-    if (a === e) return true;
-    // Support wildcard entries like *@hup.de
-    if (a.includes('@')) {
-      const [user, domain] = a.split('@');
-      if (user === '*' && e.endsWith(`@${domain}`)) return true;
-    }
+    if (a && a.toLowerCase() === e) return true;
   }
   return false;
+}
+
+const ASC_SHE_REVIEWERS = new Set([
+  'asc@hup.de',
+  'alexander.schulz@hup.de',
+  'she@hup.de',
+  'simon.heinrich@hup.de',
+]);
+
+export function isAscSheReviewer(email: string): boolean {
+  return ASC_SHE_REVIEWERS.has(email.toLowerCase().trim());
 }
 
 export function roleCanWrite(role: UserRole): boolean {

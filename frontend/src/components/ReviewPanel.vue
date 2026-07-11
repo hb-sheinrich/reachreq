@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Checkbox from 'primevue/checkbox'
 import type { Requirement, RequirementReviewer } from '@/stores/requirements'
 import type { User } from '@/stores/auth'
+import { useCaseMessages } from '@/locales/useCase'
 
 const props = defineProps<{
   requirement: Requirement
@@ -15,9 +16,14 @@ const emit = defineEmits<{
   (e: 'update', payload: { reviewedByCe?: boolean; reviewedByAscShe?: boolean }): void
 }>()
 
-const { t } = useI18n()
+const { t } = useI18n({ messages: useCaseMessages })
 
-const ASC_SHE_ALLOWED = ['alexander.schulz@hup.de', 'simon.heinrich@hup.de']
+const ASC_SHE_ALLOWED = [
+  'asc@hup.de',
+  'alexander.schulz@hup.de',
+  'she@hup.de',
+  'simon.heinrich@hup.de',
+]
 
 function formatDate(value?: string) {
   if (!value) return ''

@@ -2,10 +2,15 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
+import { requireWrite, requireAdmin } from '../lib/auth.js';
 import { upsertRequirementTags } from '../services/tags.js';
 import { createRequirementVersion } from '../services/versions.js';
 import { translateUseCase, type UseCase, type UseCaseTranslation } from '../services/translation.js';
 import { buildRequirementWhere } from './requirements.js';
+
+function isEditable(status: string) {
+  return status === 'DRAFT' || status === 'IN_REVIEW';
+}
 
 const alternativeFlowSchema = z.object({
   id: z.string().optional(),
@@ -84,7 +89,7 @@ async function createRequirementFromUseCase(
   tx: any,
   uc: UseCaseInput,
   moduleId: string,
-  defaults: { classification?: string; status?: string; originalLanguage?: string },
+  defaults: { classification?: string; originalLanguage?: string },
   authorId: string
 ) {
   const module = await tx.module.update({
@@ -109,7 +114,7 @@ async function createRequirementFromUseCase(
       alternativeFlows: fields.alternativeFlows,
       technicalAppendix: fields.technicalAppendix as any,
       classification: (defaults.classification as any) ?? 'MUST_HAVE',
-      status: (defaults.status as any) ?? 'DRAFT',
+      status: 'DRAFT',
       source: undefined,
       originalLanguage: defaults.originalLanguage ?? 'de',
       authorId,
@@ -178,12 +183,11 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/import/usecases', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!req.user.isAdmin) return reply.status(403).send({ error: 'Admin required' });
+    if (!requireAdmin(req, reply)) return;
 
     const schema = z.object({
       moduleId: z.string(),
       classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).optional(),
-      status: z.enum(['DRAFT', 'IN_REVIEW']).optional(),
       targetLanguage: z.enum(['de', 'en']).optional(),
       useCases: z.array(useCaseSchema),
     });
@@ -191,14 +195,14 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
-    const { moduleId, classification, status, targetLanguage, useCases: ucs } = parsed.data;
+    const { moduleId, classification, targetLanguage, useCases: ucs } = parsed.data;
 
     const originalLanguage = targetLanguage === 'en' ? 'de' : 'de';
 
     const created = await prisma.$transaction(async (tx) => {
       const requirements: any[] = [];
       for (const uc of ucs) {
-        const requirement = await createRequirementFromUseCase(tx, uc, moduleId, { classification, status, originalLanguage }, req.user.sub);
+        const requirement = await createRequirementFromUseCase(tx, uc, moduleId, { classification, originalLanguage }, req.user.sub);
 
         if (targetLanguage && targetLanguage !== originalLanguage) {
           const payload = await buildUseCasePayload(requirement);
@@ -231,13 +235,15 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/requirements/:id/usecase/import', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.intersection(
       useCaseSchema,
       z.object({
         classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).optional(),
-        status: z.enum(['DRAFT', 'IN_REVIEW']).optional(),
         targetLanguage: z.enum(['de', 'en']).optional(),
+        editVersion: z.number(),
       })
     );
 
@@ -251,6 +257,9 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
       include: { tags: { include: { tag: { select: { name: true } } } } },
     });
     if (!current) return reply.status(404).send({ error: 'Requirement not found' });
+    if (!isEditable(current.status)) {
+      return reply.status(403).send({ error: 'Requirement is not in an editable state' });
+    }
 
     const fields = mapUseCaseToRequirementFields(data);
     const originalLanguage = current.originalLanguage ?? 'de';
@@ -269,14 +278,17 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
         alternativeFlows: fields.alternativeFlows,
         technicalAppendix: fields.technicalAppendix as any,
         classification: (data.classification as any) ?? current.classification,
-        status: (data.status as any) ?? current.status,
+        status: current.status,
         originalLanguage,
       };
 
-      await tx.requirement.update({
-        where: { id },
-        data: updateData,
+      const updatedCount = await tx.requirement.updateMany({
+        where: { id, editVersion: data.editVersion },
+        data: { ...updateData, editVersion: { increment: 1 } },
       });
+      if (updatedCount.count === 0) {
+        throw new Error('Conflict');
+      }
 
       await upsertRequirementTags(tx, id, fields.tags);
 
@@ -293,7 +305,7 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
       const version = await createRequirementVersion(tx, requirement, 'EDIT', req.user.sub, 'Use-Case 2.0 Import');
       await tx.requirement.update({
         where: { id },
-        data: { currentVersionId: version.id, editVersion: { increment: 1 } },
+        data: { currentVersionId: version.id },
       });
 
       if (data.targetLanguage && data.targetLanguage !== originalLanguage) {

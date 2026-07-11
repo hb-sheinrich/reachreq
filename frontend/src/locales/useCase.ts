@@ -52,21 +52,6 @@ export const useCaseMessages = {
         moveDown: 'Nach unten',
         restore: 'Wiederherstellen',
       },
-      statuses: {
-        DRAFT: 'Entwurf',
-        IN_REVIEW: 'In Prüfung',
-        SUBMITTED_FOR_RELEASE: 'Zur Freigabe',
-        APPROVED: 'Freigegeben',
-        REJECTED: 'Abgelehnt',
-        POSTPONED: 'Zurückgestellt',
-        ARCHIVED: 'Archiviert',
-      },
-      classifications: {
-        MUST_HAVE: 'Muss',
-        SHOULD_HAVE: 'Soll',
-        NICE_TO_HAVE: 'Kann',
-        WONT_HAVE: 'Wird nicht',
-      },
       version: {
         title: 'Versionen',
         current: 'Aktuell',
@@ -136,21 +121,6 @@ export const useCaseMessages = {
         moveUp: 'Move up',
         moveDown: 'Move down',
         restore: 'Restore',
-      },
-      statuses: {
-        DRAFT: 'Draft',
-        IN_REVIEW: 'In Review',
-        SUBMITTED_FOR_RELEASE: 'Ready for Approval',
-        APPROVED: 'Approved',
-        REJECTED: 'Rejected',
-        POSTPONED: 'Postponed',
-        ARCHIVED: 'Archived',
-      },
-      classifications: {
-        MUST_HAVE: 'Must',
-        SHOULD_HAVE: 'Should',
-        NICE_TO_HAVE: 'Could',
-        WONT_HAVE: "Won't",
       },
       version: {
         title: 'Versions',

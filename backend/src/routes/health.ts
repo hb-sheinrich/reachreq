@@ -14,7 +14,10 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const pong = await getRedis().ping();
+      const pong = await Promise.race([
+        getRedis().ping(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000)),
+      ]);
       checks.redis = pong === 'PONG' ? 'ok' : 'error';
     } catch {
       checks.redis = 'error';

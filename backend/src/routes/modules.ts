@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
+import { requireWrite } from '../lib/auth.js';
 
 function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   if (!req.user.isAdmin) {
@@ -42,7 +43,9 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
     return { module };
   });
 
-  app.post('/api/modules', async (req, reply) => {
+  app.post('/api/modules', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const schema = z.object({
       name: z.string().min(1),
       code: z.string().min(1).max(10),

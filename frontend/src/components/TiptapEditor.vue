@@ -13,7 +13,6 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Popover from 'primevue/popover'
 import type { GlossaryTerm } from '@/stores/glossary'
-import { useCaseMessages } from '@/locales/useCase'
 
 const props = defineProps<{
   modelValue?: string
@@ -29,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
-const { t } = useI18n({ messages: useCaseMessages })
+const { t } = useI18n()
 
 const definedPopover = ref<InstanceType<typeof Popover> | null>(null)
 const definedTerm = ref<{ id?: string; term?: string; definition?: string }>({})

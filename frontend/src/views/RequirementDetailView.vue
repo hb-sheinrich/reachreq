@@ -9,7 +9,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useAutosave } from '@/services/autosave'
 import { useTitle } from '@/composables/useTitle'
-import { useCaseMessages } from '@/locales/useCase'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -27,7 +26,7 @@ import CommentList from '@/components/CommentList.vue'
 import AutosaveIndicator from '@/components/AutosaveIndicator.vue'
 import { classificationClass } from '@/utils/classification'
 
-const { t } = useI18n({ messages: useCaseMessages })
+const { t } = useI18n()
 const toast = useToast()
 const route = useRoute()
 const router = useRouter()
@@ -59,10 +58,10 @@ const pendingAnchor = ref<{ field: string; text: string; start: number; end: num
 useTitle(computed(() => store.current?.humanReadableId || ''))
 
 const classificationOptions = [
-  { label: t('useCase.classifications.MUST_HAVE'), value: 'MUST_HAVE' },
-  { label: t('useCase.classifications.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
-  { label: t('useCase.classifications.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
-  { label: t('useCase.classifications.WONT_HAVE'), value: 'WONT_HAVE' },
+  { label: t('classification.MUST_HAVE'), value: 'MUST_HAVE' },
+  { label: t('classification.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
+  { label: t('classification.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
+  { label: t('classification.WONT_HAVE'), value: 'WONT_HAVE' },
 ]
 
 const statusClasses: Record<string, string> = {
@@ -420,7 +419,7 @@ function removeAppendixEntry(index: number) {
             class="px-3 py-1 rounded-pill text-sm font-medium"
             :class="statusClass(store.current.status)"
           >
-            {{ t(`useCase.statuses.${store.current.status}`) }}
+            {{ t(`status.${store.current.status}`) }}
           </span>
           <span
             class="px-3 py-1 rounded-pill text-sm font-medium font-mono"
@@ -491,7 +490,7 @@ function removeAppendixEntry(index: number) {
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.status') }}</div>
               <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium" :class="statusClass(store.current.status)">
-                {{ t(`useCase.statuses.${store.current.status}`) }}
+                {{ t(`status.${store.current.status}`) }}
               </span>
             </div>
 
