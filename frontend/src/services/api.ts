@@ -27,6 +27,7 @@ async function request(method: string, path: string, body?: unknown, options?: R
     ...options,
     method,
     headers,
+    credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   })
 

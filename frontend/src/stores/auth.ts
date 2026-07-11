@@ -15,7 +15,7 @@ export interface User {
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string>(localStorage.getItem('reachreq_token') || '')
   const user = ref<User | null>(null)
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => !!user.value)
 
   function setToken(newToken: string) {
     token.value = newToken
@@ -29,7 +29,6 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchUser() {
-    if (!token.value) return
     try {
       const data = await api.get('/auth/me')
       user.value = data.user
@@ -43,9 +42,11 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = `${apiUrl}/auth/login`
   }
 
-  function handleCallback(tokenFromUrl: string) {
-    setToken(tokenFromUrl)
-    fetchUser()
+  function handleCallback(tokenFromUrl?: string) {
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl)
+    }
+    return fetchUser()
   }
 
   return { token, user, isAuthenticated, isAdmin: computed(() => !!user.value?.isAdmin), setToken, logout, fetchUser, login, handleCallback }

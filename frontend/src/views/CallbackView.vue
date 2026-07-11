@@ -9,15 +9,17 @@ useTitle()
 const router = useRouter()
 const auth = useAuthStore()
 
-onMounted(() => {
-  const params = new URLSearchParams(window.location.search)
-  const token = params.get('token')
+onMounted(async () => {
+  const searchParams = new URLSearchParams(window.location.search)
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const token = searchParams.get('token') || hashParams.get('token')
+
   if (token) {
-    auth.handleCallback(token)
-    router.push({ name: 'Home' })
-  } else {
-    router.push({ name: 'Login' })
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
   }
+
+  await auth.handleCallback(token ?? undefined)
+  router.replace({ name: 'Home' })
 })
 </script>
 
