@@ -91,6 +91,7 @@ function initDraft() {
     moduleId: entry.moduleId,
   }
   ready.value = true
+  setBaseline()
 }
 
 function payload() {
@@ -105,7 +106,7 @@ function payload() {
   }
 }
 
-const { status, statusMessage, forceSave, setupWatch } = useAutosave(
+const { status, statusMessage, forceSave, setupWatch, setBaseline } = useAutosave(
   id,
   payload,
   (targetId, data) => store.updateEntry(targetId, data)

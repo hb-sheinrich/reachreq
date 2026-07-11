@@ -16,6 +16,7 @@ export const useCaseMessages = {
       classification: 'Klassifizierung',
       status: 'Status',
       originalLanguage: 'Originalsprache',
+      viewLanguage: 'Anzeigesprache',
       review: {
         title: 'Prüfungen',
         ce: 'Geprüft von CE',
@@ -82,6 +83,7 @@ export const useCaseMessages = {
       classification: 'Classification',
       status: 'Status',
       originalLanguage: 'Original Language',
+      viewLanguage: 'Display Language',
       review: {
         title: 'Reviews',
         ce: 'Reviewed by CE',

@@ -53,6 +53,8 @@ const importLoading = ref(false)
 const importError = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingAnchor = ref<{ field: string; text: string; start: number; end: number } | null>(null)
+const viewLanguage = ref<'de' | 'en'>('de')
+const translating = ref(false)
 
 useTitle(computed(() => store.current?.humanReadableId || ''))
 
@@ -88,12 +90,30 @@ function formatDate(value?: string) {
   })
 }
 
+const isTranslation = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage)
+
 const isEditable = computed(() => {
-  return store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW'
+  return (store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW') && !isTranslation.value
 })
+
+const canTranslate = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage && !translating.value)
+
+const languageOptions = computed(() => [
+  { label: 'DE', value: 'de' },
+  { label: 'EN', value: 'en' },
+])
+
+async function loadWithLanguage(lang: 'de' | 'en' = viewLanguage.value) {
+  await store.fetchRequirement(id.value, lang)
+  initDraft()
+}
 
 watch(isEditable, (editable) => {
   if (!editable) editMode.value = false
+})
+
+watch(viewLanguage, async () => {
+  await loadWithLanguage()
 })
 
 function cloneDeep<T>(value: T): T {
@@ -132,6 +152,7 @@ function initDraft() {
     value: String(v || ''),
   }))
   ready.value = true
+  setBaseline()
 }
 
 const payload = () => {
@@ -162,7 +183,7 @@ const autosaveSource = computed(() => ({
   appendixEntries: appendixEntries.value,
 }))
 
-const { status, statusMessage, forceSave, setupWatch } = useAutosave(
+const { status, statusMessage, forceSave, setupWatch, setBaseline } = useAutosave(
   id,
   payload,
   (targetId, data) => store.updateRequirement(targetId, data, store.current?.editVersion || 0),
@@ -174,16 +195,16 @@ onMounted(async () => {
   await auth.fetchUser()
   await modulesStore.fetchModules()
   await glossary.fetchTerms()
-  await store.fetchRequirement(id.value)
   await store.fetchVersions(id.value)
-  initDraft()
+  await loadWithLanguage()
+  viewLanguage.value = (store.current?.originalLanguage as 'de' | 'en') || 'de'
 })
 
 watch(id, async (newId) => {
   if (!newId) return
-  await store.fetchRequirement(newId)
   await store.fetchVersions(newId)
-  initDraft()
+  await loadWithLanguage()
+  viewLanguage.value = (store.current?.originalLanguage as 'de' | 'en') || 'de'
 })
 
 onBeforeRouteUpdate(async (to, from) => {
@@ -295,7 +316,10 @@ async function onCreateJira() {
 async function onRestore(versionId: string) {
   await store.rollbackRequirement(id.value, versionId)
   await store.fetchVersions(id.value)
-  initDraft()
+  const originalLang = (store.current?.originalLanguage as 'de' | 'en') || 'de'
+  await loadWithLanguage(originalLang)
+  viewLanguage.value = originalLang
+  editMode.value = true
 }
 
 function onIgnoreWarnings(reason: string) {
@@ -322,7 +346,9 @@ async function onImportFile(event: Event) {
     const payload = Array.isArray(parsed) ? parsed[0] : parsed
     await store.importUseCase(id.value, payload)
     await store.fetchVersions(id.value)
-    initDraft()
+    const originalLang = (store.current?.originalLanguage as 'de' | 'en') || 'de'
+    await loadWithLanguage(originalLang)
+    viewLanguage.value = originalLang
   } catch (err: any) {
     importError.value = err.message || 'Import fehlgeschlagen'
   } finally {
@@ -332,9 +358,25 @@ async function onImportFile(event: Event) {
 }
 
 async function translateTo(language: 'de' | 'en') {
-  await store.translateRequirement(id.value, language)
-  await store.fetchRequirement(id.value)
-  initDraft()
+  if (!store.current) return
+  if (language === store.current.originalLanguage) {
+    toast.add({ severity: 'warn', summary: t('app.error'), detail: t('glossary.translationSameLanguage'), life: 3000 })
+    return
+  }
+  translating.value = true
+  try {
+    await store.translateRequirement(id.value, language)
+    toast.add({ severity: 'success', summary: t('app.success'), detail: t('glossary.translationSaved'), life: 3000 })
+    if (viewLanguage.value === language) {
+      await loadWithLanguage(language)
+    } else {
+      viewLanguage.value = language
+    }
+  } catch (err: any) {
+    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || t('glossary.translationError'), life: 4000 })
+  } finally {
+    translating.value = false
+  }
 }
 
 function moveMainStep(index: number, direction: number) {
@@ -510,6 +552,18 @@ function removeAppendixEntry(index: number) {
               <div class="font-mono text-text uppercase">{{ store.current.originalLanguage || 'de' }}</div>
             </div>
 
+            <div class="space-y-1">
+              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.viewLanguage') }}</div>
+              <Select
+                v-model="viewLanguage"
+                :options="languageOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+                :disabled="editMode"
+              />
+            </div>
+
             <div class="space-y-2">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.tags') }}</div>
               <TagInput v-model="draft.tags" :disabled="!editMode" />
@@ -531,7 +585,7 @@ function removeAppendixEntry(index: number) {
 
             <div class="border-t border-border pt-3 flex flex-wrap gap-2">
               <Button icon="pi pi-file-import" :label="t('useCase.actions.import')" text size="small" @click="triggerImport" />
-              <Button icon="pi pi-language" :label="t('useCase.actions.translate')" text size="small" @click="translateTo('en')" />
+              <Button icon="pi pi-language" :label="t('useCase.actions.translate')" text size="small" :disabled="!canTranslate" :loading="translating" @click="translateTo(viewLanguage)" />
             </div>
             <input ref="fileInput" type="file" accept=".json" class="hidden" @change="onImportFile" />
             <div v-if="importError" class="text-sm text-glossary-alias">{{ importError }}</div>
