@@ -63,6 +63,16 @@ export async function buildApp() {
       root: publicDir,
       prefix: '/',
       wildcard: false,
+      cacheControl: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html') || filePath.endsWith('/')) {
+          res.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+        } else if (filePath.includes('/assets/')) {
+          res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+        } else {
+          res.setHeader('cache-control', 'public, max-age=0, must-revalidate');
+        }
+      },
     });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api')) {
