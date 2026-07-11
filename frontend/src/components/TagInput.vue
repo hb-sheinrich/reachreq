@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/services/api'
@@ -24,10 +24,17 @@ const autoCompleteRef = ref<InstanceType<typeof AutoComplete> | null>(null)
 
 const selected = ref<{ name: string }[]>([])
 
+function namesEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((name, i) => name === b[i])
+}
+
 watch(
   () => props.modelValue,
   (tags) => {
     const normalized = tags || []
+    const currentNames = selected.value.map((s) => s.name)
+    if (namesEqual(currentNames, normalized)) return
     selected.value = normalized.map((name) => ({ name }))
   },
   { immediate: true },
@@ -36,10 +43,9 @@ watch(
 watch(
   selected,
   (value) => {
-    emit(
-      'update:modelValue',
-      value.map((v) => v.name),
-    )
+    const emitted = value.map((v) => v.name)
+    if (namesEqual(emitted, props.modelValue || [])) return
+    emit('update:modelValue', emitted)
   },
   { deep: true },
 )
@@ -108,12 +114,20 @@ function onTagClick(name: string) {
   router.push({ name: 'Requirements', query: { tags: name } })
 }
 
+let inputEl: HTMLInputElement | undefined
+
 onMounted(async () => {
   await nextTick()
   const ac = autoCompleteRef.value as any
-  const inputEl = ac?.$refs?.focusInput as HTMLInputElement | undefined
+  inputEl = ac?.$refs?.focusInput as HTMLInputElement | undefined
   if (inputEl) {
     inputEl.addEventListener('keydown', onKeyDown, true)
+  }
+})
+
+onUnmounted(() => {
+  if (inputEl) {
+    inputEl.removeEventListener('keydown', onKeyDown, true)
   }
 })
 </script>
@@ -124,7 +138,7 @@ onMounted(async () => {
     v-model="selected"
     :suggestions="suggestions"
     :disabled="disabled"
-    :placeholder="placeholder || 'Tag hinzufügen...'"
+    :placeholder="placeholder || t('tag.addPlaceholder')"
     option-label="name"
     multiple
     :dropdown="true"

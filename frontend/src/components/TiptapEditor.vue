@@ -34,11 +34,18 @@ const { t } = useI18n({ messages: useCaseMessages })
 const definedPopover = ref<InstanceType<typeof Popover> | null>(null)
 const definedTerm = ref<{ id?: string; term?: string; definition?: string }>({})
 const lastEmitted = ref<string>('')
+const lastTermKey = ref<string>('')
 
 const glossaryHighlightPluginKey = new PluginKey('glossaryHighlight')
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function termKey(terms?: GlossaryTerm[]): string {
+  return (terms || [])
+    .map((t) => `${t.id || ''}:${t.term || ''}:${(t.aliases || []).join(',')}`)
+    .join('|')
 }
 
 function escapeHtml(value: string) {
@@ -354,6 +361,9 @@ watch(
   () => props.terms,
   (terms) => {
     if (!editor.value) return
+    const key = termKey(terms)
+    if (key === lastTermKey.value) return
+    lastTermKey.value = key
     ;(editor.value.commands as any).setGlossaryTerms(terms || [])
   },
 )

@@ -5,6 +5,7 @@ export const messages = {
     tag: {
       createOption: "'{name}' anlegen",
       create: 'Tag anlegen',
+      addPlaceholder: 'Tag hinzufügen...',
     },
     comment: {
       title: 'Kommentare',
@@ -209,6 +210,7 @@ export const messages = {
     tag: {
       createOption: "Create '{name}'",
       create: 'Create tag',
+      addPlaceholder: 'Add tag...',
     },
     comment: {
       title: 'Comments',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, onBeforeRouteUpdate, onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useGlossaryStore, type GlossaryTranslation } from '@/stores/glossary'
 import { useAuthStore } from '@/stores/auth'
@@ -54,10 +54,28 @@ watch(id, async (newId) => {
   initDraft()
 })
 
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.params.id !== from.params.id) {
+    await forceSave(from.params.id as string)
+  }
+})
+
+onBeforeRouteLeave(async () => {
+  await forceSave()
+})
+
 watch(viewLanguage, () => {
   translationResult.value = null
   loadTranslation()
 })
+
+function cloneDeep<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
+  }
+}
 
 function initDraft() {
   if (!store.current) return
@@ -68,7 +86,7 @@ function initDraft() {
     definition: entry.definition,
     example: entry.example,
     tags: (entry.tags || []).join(', '),
-    aliases: entry.aliases || [],
+    aliases: cloneDeep(entry.aliases || []),
     originalLanguage: entry.originalLanguage || 'de',
     moduleId: entry.moduleId,
   }
@@ -88,9 +106,9 @@ function payload() {
 }
 
 const { status, statusMessage, forceSave, setupWatch } = useAutosave(
-  id.value,
+  id,
   payload,
-  (data) => store.updateEntry(id.value, data)
+  (targetId, data) => store.updateEntry(targetId, data)
 )
 
 setupWatch(draft, ready)

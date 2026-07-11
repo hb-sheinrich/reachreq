@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteUpdate, onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'primevue/usetoast'
 import { useRequirementsStore } from '@/stores/requirements'
@@ -98,6 +98,14 @@ watch(isEditable, (editable) => {
   if (!editable) editMode.value = false
 })
 
+function cloneDeep<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
+  }
+}
+
 function initDraft() {
   if (!store.current) return
   ready.value = false
@@ -109,15 +117,15 @@ function initDraft() {
     goal: source.goal,
     precondition: source.precondition,
     postcondition: source.postcondition,
-    mainFlow: source.mainFlow || [],
+    mainFlow: cloneDeep(source.mainFlow || []),
     alternativeFlows: (source.alternativeFlows || []).map((flow: any) => ({
       id: flow.id,
       afterStep: flow.afterStep ?? flow.branchAt ?? '',
-      steps: flow.steps || [''],
+      steps: cloneDeep(flow.steps || ['']),
     })),
-    tags: source.tags || [],
-    acceptanceCriteria: source.acceptanceCriteria || [],
-    technicalAppendix: source.technicalAppendix || {},
+    tags: cloneDeep(source.tags || []),
+    acceptanceCriteria: cloneDeep(source.acceptanceCriteria || []),
+    technicalAppendix: cloneDeep(source.technicalAppendix || {}),
     category: source.category,
     classification: source.classification,
     moduleId: source.moduleId,
@@ -168,9 +176,9 @@ const autosaveSource = computed(() => ({
 }))
 
 const { status, statusMessage, forceSave, setupWatch } = useAutosave(
-  id.value,
+  id,
   payload,
-  (data) => store.updateRequirement(id.value, data, store.current?.editVersion || 0),
+  (targetId, data) => store.updateRequirement(targetId, data, store.current?.editVersion || 0),
 )
 
 setupWatch(autosaveSource, ready)
@@ -186,10 +194,19 @@ onMounted(async () => {
 
 watch(id, async (newId) => {
   if (!newId) return
-  await forceSave()
   await store.fetchRequirement(newId)
   await store.fetchVersions(newId)
   initDraft()
+})
+
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.params.id !== from.params.id) {
+    await forceSave(from.params.id as string)
+  }
+})
+
+onBeforeRouteLeave(async () => {
+  await forceSave()
 })
 
 function toggleEdit() {

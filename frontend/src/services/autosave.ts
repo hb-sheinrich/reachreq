@@ -3,9 +3,9 @@ import { ref, watch, onUnmounted, type Ref } from 'vue'
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
 export function useAutosave<T extends Record<string, unknown>>(
-  id: string,
+  id: Ref<string>,
   getter: () => T,
-  saver: (data: T) => Promise<unknown>
+  saver: (id: string, data: T) => Promise<unknown>
 ) {
   const status = ref<SaveStatus>('idle')
   const statusMessage = ref('')
@@ -21,9 +21,13 @@ export function useAutosave<T extends Record<string, unknown>>(
     }
   }
 
-  function loadDraft(): T | null {
+  function draftKey(targetId: string) {
+    return `draft:${targetId}`
+  }
+
+  function loadDraft(targetId?: string): T | null {
     try {
-      const key = `draft:${id}`
+      const key = draftKey(targetId || id.value)
       const raw = localStorage.getItem(key)
       if (!raw) return null
       return JSON.parse(raw) as T
@@ -32,40 +36,41 @@ export function useAutosave<T extends Record<string, unknown>>(
     }
   }
 
-  function saveDraft(data: T) {
+  function saveDraft(targetId: string, data: T) {
     try {
-      localStorage.setItem(`draft:${id}`, JSON.stringify(data))
+      localStorage.setItem(draftKey(targetId), JSON.stringify(data))
     } catch {
       // ignore
     }
   }
 
-  function clearDraft() {
-    localStorage.removeItem(`draft:${id}`)
+  function clearDraft(targetId: string) {
+    localStorage.removeItem(draftKey(targetId))
   }
 
   function setBaseline() {
     lastData = serialize(getter())
   }
 
-  async function save() {
+  async function save(targetId?: string) {
+    const currentId = targetId || id.value
     const data = getter()
     const serialized = serialize(data)
     if (lastData !== undefined && serialized === lastData) {
       status.value = 'saved'
       statusMessage.value = 'Gespeichert'
-      clearDraft()
+      clearDraft(currentId)
       return
     }
 
     status.value = 'saving'
     statusMessage.value = 'Speichert...'
     try {
-      await saver(data)
+      await saver(currentId, data)
       lastData = serialized
       status.value = 'saved'
       statusMessage.value = 'Gespeichert'
-      clearDraft()
+      clearDraft(currentId)
     } catch (err: any) {
       if (err.status === 409) {
         status.value = 'conflict'
@@ -74,20 +79,21 @@ export function useAutosave<T extends Record<string, unknown>>(
         status.value = 'error'
         statusMessage.value = err.message || 'Fehler'
       }
-      saveDraft(data)
+      saveDraft(currentId, data)
     }
   }
 
   function trigger() {
+    const targetId = id.value
     status.value = 'idle'
     statusMessage.value = ''
     if (timer) window.clearTimeout(timer)
-    timer = window.setTimeout(() => save(), DEBOUNCE_MS)
+    timer = window.setTimeout(() => save(targetId), DEBOUNCE_MS)
   }
 
-  function forceSave() {
+  function forceSave(overrideId?: string) {
     if (timer) window.clearTimeout(timer)
-    return save()
+    return save(overrideId)
   }
 
   function setupWatch(source: any, ready?: Ref<boolean>) {
@@ -107,13 +113,15 @@ export function useAutosave<T extends Record<string, unknown>>(
     }
     const beforeUnload = () => {
       if (status.value === 'saving' || status.value === 'idle') {
-        saveDraft(getter())
+        saveDraft(id.value, getter())
       }
     }
     window.addEventListener('beforeunload', beforeUnload)
     onUnmounted(() => {
       window.removeEventListener('beforeunload', beforeUnload)
       if (timer) window.clearTimeout(timer)
+      // best-effort flush of the pending save for the current id
+      save(id.value)
     })
   }
 
