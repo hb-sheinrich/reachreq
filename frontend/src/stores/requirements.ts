@@ -11,9 +11,6 @@ export interface RequirementVersion {
   id: string
   versionNumber: number
   title: string
-  description?: string
-  context?: string
-  acceptanceCriteria: string[]
   classification: string
   moduleId: string
   source?: string
@@ -32,9 +29,6 @@ export interface Requirement {
   humanReadableId: string
   moduleId: string
   title: string
-  description?: string
-  context?: string
-  acceptanceCriteria: string[]
   classification: 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE'
   status: 'DRAFT' | 'IN_REVIEW' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'POSTPONED'
   source?: string
@@ -56,7 +50,7 @@ export interface Requirement {
   precondition?: string
   postcondition?: string
   mainFlow: string[]
-  alternativeFlows: { id?: string; afterStep?: string; branchAt?: string; steps: string[] }[]
+  alternativeFlows: { id?: string; afterStep?: string | number; branchAt?: string | number; steps: string[] }[]
   technicalAppendix?: Record<string, unknown>
   originalLanguage?: 'de' | 'en'
 

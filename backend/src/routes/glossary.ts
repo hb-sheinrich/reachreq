@@ -67,7 +67,6 @@ async function checkAiReview(
     const result = await reviewGlossary({
       type: 'glossary',
       title: data.term,
-      description: data.definition,
       term: data.term,
       definition: data.definition,
       example: data.example ?? undefined,
@@ -121,6 +120,8 @@ async function applyGlossaryTranslation(entry: any, lang: string) {
 export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/glossary', async (req: FastifyRequest, reply: FastifyReply) => {
     const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(100, Number(query.take) || 50));
     const where: any = {};
     if (query.moduleId) where.moduleId = query.moduleId;
     if (query.status) where.status = query.status;
@@ -134,6 +135,8 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
     const [entries, total] = await Promise.all([
       prisma.glossaryEntry.findMany({
         where,
+        skip,
+        take,
         orderBy: { term: 'asc' },
         include: {
           module: { select: { id: true, name: true } },
@@ -522,7 +525,6 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
       const result = await reviewGlossary({
         type: 'glossary',
         title: current.term,
-        description: current.definition,
         term: current.term,
         definition: current.definition,
         example: current.example ?? undefined,

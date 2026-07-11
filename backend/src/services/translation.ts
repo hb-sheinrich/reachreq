@@ -4,9 +4,6 @@ import { getEnv } from '../lib/env.js';
 export interface UseCase {
   id?: string;
   title: string;
-  description?: string | null;
-  context?: string | null;
-  acceptanceCriteria?: string[];
   category?: string | null;
   goal?: string | null;
   precondition?: string | null;
@@ -20,9 +17,6 @@ export interface UseCase {
 
 export interface UseCaseTranslation {
   title?: string | null;
-  description?: string | null;
-  context?: string | null;
-  acceptanceCriteria?: string[];
   category?: string | null;
   goal?: string | null;
   precondition?: string | null;
@@ -71,19 +65,22 @@ function safeParseJson<T>(text: string): T | null {
 
 export async function translateUseCase(payload: UseCase, targetLang: 'de' | 'en'): Promise<UseCaseTranslation> {
   const model = getEnv().ANTHROPIC_MODEL;
-  const keys = ['title', 'description', 'context', 'acceptanceCriteria', 'category', 'goal', 'precondition', 'postcondition', 'mainFlow', 'alternativeFlows', 'technicalAppendix', 'aliases'];
+  const keys = ['title', 'category', 'goal', 'precondition', 'postcondition', 'mainFlow', 'alternativeFlows', 'technicalAppendix', 'aliases'];
 
-  const response = await getClient().messages.create({
-    model,
-    max_tokens: 4096,
-    system: 'You are a professional translator for software requirements. Respond only with a single valid JSON object, no markdown, no explanations. Preserve all JSON keys and structure; only translate human-readable string values.',
-    messages: [
-      {
-        role: 'user',
-        content: `Translate the following content to ${targetLang}. Return a JSON object with these keys: ${keys.join(', ')}.\n\nInput: ${JSON.stringify(payload)}`,
-      },
-    ],
-  });
+  const response = await getClient().messages.create(
+    {
+      model,
+      max_tokens: 4096,
+      system: 'You are a professional translator for software requirements. Respond only with a single valid JSON object, no markdown, no explanations. Preserve all JSON keys and structure; only translate human-readable string values.',
+      messages: [
+        {
+          role: 'user',
+          content: `Translate the following content to ${targetLang}. Return a JSON object with these keys: ${keys.join(', ')}.\n\nInput: ${JSON.stringify(payload)}`,
+        },
+      ],
+    },
+    { timeout: 60_000 },
+  );
 
   const text = response.content
     .filter((c) => c.type === 'text')
@@ -97,9 +94,6 @@ export async function translateUseCase(payload: UseCase, targetLang: 'de' | 'en'
 
   return {
     title: parsed.title ?? null,
-    description: parsed.description ?? null,
-    context: parsed.context ?? null,
-    acceptanceCriteria: parsed.acceptanceCriteria ?? [],
     category: parsed.category ?? null,
     goal: parsed.goal ?? null,
     precondition: parsed.precondition ?? null,

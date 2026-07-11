@@ -23,6 +23,7 @@ export async function buildApp() {
       level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     },
     trustProxy: 2,
+    bodyLimit: 5 * 1024 * 1024,
   });
 
   await registerCors(app);

@@ -96,8 +96,12 @@ async function buildMentionList(content: string, explicitIds: string[]) {
 export async function commentRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/comments', async (req, reply) => {
     const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(100, Number(query.take) || 100));
     const flat = await prisma.comment.findMany({
       where: buildWhere(query),
+      skip,
+      take,
       include: { author: authorSelect, mentions: mentionInclude },
       orderBy: { createdAt: 'asc' },
     });
@@ -106,8 +110,13 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/requirements/:id/comments', async (req, reply) => {
     const { id } = req.params as { id: string };
+    const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(100, Number(query.take) || 100));
     const flat = await prisma.comment.findMany({
       where: { requirementId: id },
+      skip,
+      take,
       include: { author: authorSelect, mentions: mentionInclude },
       orderBy: { createdAt: 'asc' },
     });
@@ -116,8 +125,13 @@ export async function commentRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/glossary/:id/comments', async (req, reply) => {
     const { id } = req.params as { id: string };
+    const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(100, Number(query.take) || 100));
     const flat = await prisma.comment.findMany({
       where: { glossaryEntryId: id },
+      skip,
+      take,
       include: { author: authorSelect, mentions: mentionInclude },
       orderBy: { createdAt: 'asc' },
     });

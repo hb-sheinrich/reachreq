@@ -36,7 +36,7 @@ const sortField = ref('')
 const sortOrder = ref(0)
 const showCreate = ref(false)
 const creating = ref(false)
-const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE', description: '' })
+const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE' })
 
 const showImport = ref(false)
 const importing = ref(false)
@@ -102,7 +102,7 @@ async function create() {
   creating.value = true
   try {
     const req = await store.createRequirement(newReq.value)
-    newReq.value = { title: '', moduleId: '', classification: 'MUST_HAVE', description: '' }
+    newReq.value = { title: '', moduleId: '', classification: 'MUST_HAVE' }
     showCreate.value = false
     router.push({ name: 'RequirementDetail', params: { id: req.id } })
   } finally {

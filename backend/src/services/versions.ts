@@ -51,9 +51,6 @@ function buildRequirementSnapshot(requirement: any, tags?: string[]): Record<str
   const tagList = tags ?? extractTags(requirement);
   return {
     title: requirement.title ?? null,
-    description: requirement.description ?? null,
-    context: requirement.context ?? null,
-    acceptanceCriteria: requirement.acceptanceCriteria ?? [],
     category: requirement.category ?? null,
     goal: requirement.goal ?? null,
     precondition: requirement.precondition ?? null,
@@ -105,9 +102,6 @@ export async function createRequirementVersion(
       changeComment,
       changeType,
       title: requirement.title,
-      description: requirement.description,
-      context: requirement.context,
-      acceptanceCriteria: requirement.acceptanceCriteria ?? [],
       category: requirement.category,
       goal: requirement.goal,
       precondition: requirement.precondition,

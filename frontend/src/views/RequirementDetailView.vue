@@ -47,7 +47,6 @@ const showSubmitGate = ref(false)
 const gateReview = ref<{ id: string; result: any } | null>(null)
 const gateIgnoreReason = ref('')
 const gateSubmitting = ref(false)
-const acceptanceCriteriaText = ref('')
 const appendixEntries = ref<{ key: string; value: string }[]>([])
 const jiraLoading = ref(false)
 const importLoading = ref(false)
@@ -111,8 +110,6 @@ function initDraft() {
   const source = store.current
   draft.value = {
     title: source.title,
-    description: source.description,
-    context: source.context,
     goal: source.goal,
     precondition: source.precondition,
     postcondition: source.postcondition,
@@ -123,7 +120,6 @@ function initDraft() {
       steps: cloneDeep(flow.steps || ['']),
     })),
     tags: cloneDeep(source.tags || []),
-    acceptanceCriteria: cloneDeep(source.acceptanceCriteria || []),
     technicalAppendix: cloneDeep(source.technicalAppendix || {}),
     category: source.category,
     classification: source.classification,
@@ -131,7 +127,6 @@ function initDraft() {
     source: source.source,
     originalLanguage: source.originalLanguage,
   }
-  acceptanceCriteriaText.value = (draft.value.acceptanceCriteria || []).join('\n')
   appendixEntries.value = Object.entries(draft.value.technicalAppendix || {}).map(([k, v]) => ({
     key: k,
     value: String(v || ''),
@@ -147,8 +142,6 @@ const payload = () => {
   )
   return {
     title: draft.value.title,
-    description: draft.value.description,
-    context: draft.value.context,
     goal: draft.value.goal,
     precondition: draft.value.precondition,
     postcondition: draft.value.postcondition,
@@ -160,17 +153,12 @@ const payload = () => {
     moduleId: draft.value.moduleId,
     source: draft.value.source,
     originalLanguage: draft.value.originalLanguage,
-    acceptanceCriteria: acceptanceCriteriaText.value
-      .split('\n')
-      .filter((x) => x.trim())
-      .map((x) => x.trim()),
     technicalAppendix,
   }
 }
 
 const autosaveSource = computed(() => ({
   ...draft.value,
-  acceptanceCriteriaText: acceptanceCriteriaText.value,
   appendixEntries: appendixEntries.value,
 }))
 
@@ -735,53 +723,8 @@ function removeAppendixEntry(index: number) {
               </table>
             </section>
 
-            <!-- Non-UC-2.0 fields -->
+            <!-- Source / Module -->
             <section class="space-y-6 border-t border-border pt-6">
-              <div class="flex items-center gap-2">
-                <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.nonExportable') }}</div>
-              </div>
-
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.description') }}</label>
-                <div class="mt-2">
-                  <TiptapEditor
-                    v-model="draft.description"
-                    :editable="editMode"
-                    :terms="glossary.terms"
-                    :placeholder="t('useCase.description')"
-                    field="description"
-                    @create-comment="onCreateComment"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.context') }}</label>
-                <div class="mt-2">
-                  <TiptapEditor
-                    v-model="draft.context"
-                    :editable="editMode"
-                    :terms="glossary.terms"
-                    :placeholder="t('useCase.context')"
-                    field="context"
-                    @create-comment="onCreateComment"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.acceptanceCriteria') }}</label>
-                <div class="mt-2">
-                  <Textarea
-                    v-model="acceptanceCriteriaText"
-                    :disabled="!editMode"
-                    rows="4"
-                    class="w-full"
-                    :placeholder="editMode ? t('useCase.acceptanceCriteria') : ''"
-                  />
-                </div>
-              </div>
-
               <div v-if="editMode" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.source') }}</label>

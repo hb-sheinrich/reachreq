@@ -36,7 +36,6 @@ export function buildRequirementWhere(query: Record<string, string | undefined>)
     const q = query.q;
     where.OR = [
       { title: { contains: q, mode: 'insensitive' } },
-      { description: { contains: q, mode: 'insensitive' } },
       { humanReadableId: { contains: q, mode: 'insensitive' } },
       { tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } },
     ];
@@ -78,15 +77,14 @@ function buildOrderBy(query: Record<string, string | undefined>): any {
 async function buildUseCasePayload(requirement: any): Promise<UseCase> {
   return {
     title: requirement.title,
-    description: requirement.description,
-    context: requirement.context,
-    acceptanceCriteria: requirement.acceptanceCriteria ?? [],
+    category: requirement.category,
     goal: requirement.goal,
     precondition: requirement.precondition,
     postcondition: requirement.postcondition,
     mainFlow: requirement.mainFlow,
     alternativeFlows: requirement.alternativeFlows,
     technicalAppendix: requirement.technicalAppendix,
+    tags: mapTags(requirement),
     aliases: [],
   };
 }
@@ -102,14 +100,9 @@ async function applyRequirementTranslation(requirement: any, lang: string) {
 
   const merged = { ...requirement };
   if (translation.title !== null) merged.title = translation.title;
-  if (translation.description !== null) merged.description = translation.description;
-  if (translation.context !== null) merged.context = translation.context;
   if (translation.goal !== null) merged.goal = translation.goal;
   if (translation.precondition !== null) merged.precondition = translation.precondition;
   if (translation.postcondition !== null) merged.postcondition = translation.postcondition;
-  if (translation.acceptanceCriteria && translation.acceptanceCriteria.length > 0) {
-    merged.acceptanceCriteria = translation.acceptanceCriteria;
-  }
   if (translation.mainFlow !== null) merged.mainFlow = translation.mainFlow;
   if (translation.alternativeFlows !== null) merged.alternativeFlows = translation.alternativeFlows;
   if (translation.technicalAppendix !== null) merged.technicalAppendix = translation.technicalAppendix;
@@ -143,9 +136,14 @@ async function checkAiReview(
     const result = await reviewRequirement({
       type: 'requirement',
       title: data.title,
-      description: data.description ?? '',
-      context: data.context ?? undefined,
-      acceptanceCriteria: data.acceptanceCriteria,
+      category: data.category ?? undefined,
+      goal: data.goal ?? undefined,
+      precondition: data.precondition ?? undefined,
+      postcondition: data.postcondition ?? undefined,
+      mainFlow: data.mainFlow ?? undefined,
+      alternativeFlows: data.alternativeFlows ?? undefined,
+      technicalAppendix: data.technicalAppendix ?? undefined,
+      classification: data.classification,
       source: data.source ?? undefined,
     });
     review = await prisma.aIReview.create({
@@ -210,9 +208,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     const schema = z.object({
       moduleId: z.string(),
       title: z.string().min(1),
-      description: z.string().optional(),
-      context: z.string().optional(),
-      acceptanceCriteria: z.array(z.string()).default([]),
       classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).default('MUST_HAVE'),
       source: z.string().optional(),
       tags: z.array(z.string()).default([]),
@@ -223,7 +218,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       mainFlow: z.array(z.string()).default([]),
       alternativeFlows: z.array(z.object({
         id: z.string().optional(),
-        branchAt: z.string().optional(),
+        afterStep: z.union([z.string(), z.number()]).optional(),
         steps: z.array(z.string()).default([]),
       })).default([]),
       technicalAppendix: z.record(z.unknown()).default({}),
@@ -245,9 +240,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           humanReadableId: `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
           moduleId: data.moduleId,
           title: data.title,
-          description: data.description,
-          context: data.context,
-          acceptanceCriteria: data.acceptanceCriteria,
           category: data.category,
           goal: data.goal,
           precondition: data.precondition,
@@ -314,9 +306,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const schema = z.object({
       title: z.string().min(1).optional(),
-      description: z.string().optional().nullable(),
-      context: z.string().optional().nullable(),
-      acceptanceCriteria: z.array(z.string()).optional(),
       classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).optional(),
       source: z.string().optional().nullable(),
       moduleId: z.string().optional(),
@@ -329,7 +318,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       mainFlow: z.array(z.string()).optional(),
       alternativeFlows: z.array(z.object({
         id: z.string().optional(),
-        branchAt: z.string().optional(),
+        afterStep: z.union([z.string(), z.number()]).optional(),
         steps: z.array(z.string()).default([]),
       })).optional(),
       technicalAppendix: z.record(z.unknown()).optional().nullable(),
@@ -357,8 +346,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
         for (const [key, value] of Object.entries(rest)) {
           if (value !== undefined) fieldUpdate[key] = value;
         }
-        if (rest.description === null) fieldUpdate.description = null;
-        if (rest.context === null) fieldUpdate.context = null;
         if (rest.goal === null) fieldUpdate.goal = null;
         if (rest.precondition === null) fieldUpdate.precondition = null;
         if (rest.postcondition === null) fieldUpdate.postcondition = null;
@@ -449,9 +436,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           status: 'DRAFT',
           statusComment: null,
           title: snapshot.title,
-          description: snapshot.description,
-          context: snapshot.context,
-          acceptanceCriteria: snapshot.acceptanceCriteria,
           classification: snapshot.classification,
           moduleId: snapshot.moduleId,
           source: snapshot.source,
@@ -715,9 +699,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           currentVersionId: newVersion.id,
           status: 'DRAFT',
           title: newVersion.title,
-          description: newVersion.description,
-          context: newVersion.context,
-          acceptanceCriteria: newVersion.acceptanceCriteria,
           classification: newVersion.classification,
           moduleId: newVersion.moduleId,
           source: newVersion.source,
@@ -961,9 +942,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
         requirementId: id,
         language: targetLanguage,
         title: translation.title,
-        description: translation.description,
-        context: translation.context,
-        acceptanceCriteria: translation.acceptanceCriteria ?? [],
         goal: translation.goal,
         precondition: translation.precondition,
         postcondition: translation.postcondition,
@@ -973,9 +951,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       },
       update: {
         title: translation.title,
-        description: translation.description,
-        context: translation.context,
-        acceptanceCriteria: translation.acceptanceCriteria ?? [],
         goal: translation.goal,
         precondition: translation.precondition,
         postcondition: translation.postcondition,
@@ -1008,9 +983,14 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       const result = await reviewRequirement({
         type: 'requirement',
         title: current.title,
-        description: current.description ?? '',
-        context: current.context ?? undefined,
-        acceptanceCriteria: current.acceptanceCriteria,
+        category: current.category ?? undefined,
+        goal: current.goal ?? undefined,
+        precondition: current.precondition ?? undefined,
+        postcondition: current.postcondition ?? undefined,
+        mainFlow: current.mainFlow ?? undefined,
+        alternativeFlows: current.alternativeFlows ?? undefined,
+        technicalAppendix: current.technicalAppendix ?? undefined,
+        classification: current.classification,
         source: current.source ?? undefined,
       });
       const updated = await prisma.aIReview.update({

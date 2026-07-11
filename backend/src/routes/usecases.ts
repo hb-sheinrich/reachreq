@@ -14,8 +14,8 @@ function isEditable(status: string) {
 
 const alternativeFlowSchema = z.object({
   id: z.string().optional(),
-  afterStep: z.string().optional(),
-  branchAt: z.string().optional(),
+  afterStep: z.union([z.string(), z.number()]).optional(),
+  branchAt: z.union([z.string(), z.number()]).optional(),
   steps: z.array(z.string()).default([]),
 });
 
@@ -24,9 +24,6 @@ export const useCaseSchema = z.object({
   category: z.string().optional(),
   title: z.string().min(1),
   tags: z.array(z.string()).default([]),
-  description: z.string().optional(),
-  context: z.string().optional(),
-  acceptanceCriteria: z.array(z.string()).default([]),
   goal: z.string().optional(),
   precondition: z.string().optional(),
   mainFlow: z.array(z.string()).default([]),
@@ -42,9 +39,6 @@ function mapUseCaseToRequirementFields(uc: UseCaseInput) {
     id: uc.id || null,
     category: uc.category,
     title: uc.title,
-    description: uc.description,
-    context: uc.context,
-    acceptanceCriteria: uc.acceptanceCriteria,
     goal: uc.goal,
     precondition: uc.precondition,
     postcondition: uc.postcondition,
@@ -69,13 +63,10 @@ export function mapRequirementToUseCase(requirement: any): UseCase {
     category: requirement.category ?? undefined,
     title: requirement.title,
     tags: tagNames,
-    description: requirement.description ?? undefined,
-    context: requirement.context ?? undefined,
-    acceptanceCriteria: requirement.acceptanceCriteria ?? [],
     goal: requirement.goal ?? undefined,
     precondition: requirement.precondition ?? undefined,
     mainFlow: (requirement.mainFlow as string[]) ?? undefined,
-    alternativeFlows: (requirement.alternativeFlows as { id?: string; afterStep?: string; branchAt?: string; steps: string[] }[])?.map((flow) => ({
+    alternativeFlows: (requirement.alternativeFlows as { id?: string; afterStep?: string | number; branchAt?: string | number; steps: string[] }[])?.map((flow) => ({
       id: flow.id,
       afterStep: flow.afterStep ?? flow.branchAt ?? undefined,
       steps: flow.steps,
@@ -103,9 +94,6 @@ async function createRequirementFromUseCase(
       humanReadableId: fields.id || `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
       moduleId,
       title: fields.title,
-      description: fields.description,
-      context: fields.context,
-      acceptanceCriteria: fields.acceptanceCriteria,
       category: fields.category,
       goal: fields.goal,
       precondition: fields.precondition,
@@ -134,9 +122,7 @@ async function createRequirementFromUseCase(
 async function buildUseCasePayload(requirement: any): Promise<UseCase> {
   return {
     title: requirement.title,
-    description: requirement.description,
-    context: requirement.context,
-    acceptanceCriteria: requirement.acceptanceCriteria ?? [],
+    category: requirement.category,
     goal: requirement.goal,
     precondition: requirement.precondition,
     postcondition: requirement.postcondition,
@@ -203,32 +189,30 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
       const requirements: any[] = [];
       for (const uc of ucs) {
         const requirement = await createRequirementFromUseCase(tx, uc, moduleId, { classification, originalLanguage }, req.user.sub);
-
-        if (targetLanguage && targetLanguage !== originalLanguage) {
-          const payload = await buildUseCasePayload(requirement);
-          const translation: UseCaseTranslation = await translateUseCase(payload, targetLanguage);
-          await tx.translation.create({
-            data: {
-              requirementId: requirement.id,
-              language: targetLanguage,
-              title: translation.title,
-              description: translation.description,
-              context: translation.context,
-              acceptanceCriteria: translation.acceptanceCriteria ?? [],
-              goal: translation.goal,
-              precondition: translation.precondition,
-              postcondition: translation.postcondition,
-              mainFlow: translation.mainFlow as any,
-              alternativeFlows: translation.alternativeFlows as any,
-              technicalAppendix: translation.technicalAppendix as any,
-            },
-          });
-        }
-
         requirements.push(requirement);
       }
       return requirements;
     });
+
+    if (targetLanguage && targetLanguage !== originalLanguage) {
+      for (const requirement of created) {
+        const payload = await buildUseCasePayload(requirement);
+        const translation: UseCaseTranslation = await translateUseCase(payload, targetLanguage);
+        await prisma.translation.create({
+          data: {
+            requirementId: requirement.id,
+            language: targetLanguage,
+            title: translation.title,
+            goal: translation.goal,
+            precondition: translation.precondition,
+            postcondition: translation.postcondition,
+            mainFlow: translation.mainFlow as any,
+            alternativeFlows: translation.alternativeFlows as any,
+            technicalAppendix: translation.technicalAppendix as any,
+          },
+        });
+      }
+    }
 
     void audit('import', null, 'IMPORT', req.user.sub, { count: created.length, format: 'usecases.json' });
     return { created: created.length };
@@ -268,9 +252,6 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
       const updateData = {
         title: fields.title,
         category: fields.category,
-        description: fields.description,
-        context: fields.context,
-        acceptanceCriteria: fields.acceptanceCriteria,
         goal: fields.goal,
         precondition: fields.precondition,
         postcondition: fields.postcondition,
@@ -308,40 +289,6 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
         data: { currentVersionId: version.id },
       });
 
-      if (data.targetLanguage && data.targetLanguage !== originalLanguage) {
-        const payload = await buildUseCasePayload(requirement);
-        const translation: UseCaseTranslation = await translateUseCase(payload, data.targetLanguage);
-        await tx.translation.upsert({
-          where: { requirementId_language: { requirementId: id, language: data.targetLanguage } },
-          create: {
-            requirementId: id,
-            language: data.targetLanguage,
-            title: translation.title,
-            description: translation.description,
-            context: translation.context,
-            acceptanceCriteria: translation.acceptanceCriteria ?? [],
-            goal: translation.goal,
-            precondition: translation.precondition,
-            postcondition: translation.postcondition,
-            mainFlow: translation.mainFlow as any,
-            alternativeFlows: translation.alternativeFlows as any,
-            technicalAppendix: translation.technicalAppendix as any,
-          },
-          update: {
-            title: translation.title,
-            description: translation.description,
-            context: translation.context,
-            acceptanceCriteria: translation.acceptanceCriteria ?? [],
-            goal: translation.goal,
-            precondition: translation.precondition,
-            postcondition: translation.postcondition,
-            mainFlow: translation.mainFlow as any,
-            alternativeFlows: translation.alternativeFlows as any,
-            technicalAppendix: translation.technicalAppendix as any,
-          },
-        });
-      }
-
       return tx.requirement.findUnique({
         where: { id },
         include: {
@@ -352,6 +299,34 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
         },
       });
     });
+
+    if (data.targetLanguage && data.targetLanguage !== originalLanguage && updated) {
+      const payload = await buildUseCasePayload(updated);
+      const translation: UseCaseTranslation = await translateUseCase(payload, data.targetLanguage);
+      await prisma.translation.upsert({
+        where: { requirementId_language: { requirementId: id, language: data.targetLanguage } },
+        create: {
+          requirementId: id,
+          language: data.targetLanguage,
+          title: translation.title,
+          goal: translation.goal,
+          precondition: translation.precondition,
+          postcondition: translation.postcondition,
+          mainFlow: translation.mainFlow as any,
+          alternativeFlows: translation.alternativeFlows as any,
+          technicalAppendix: translation.technicalAppendix as any,
+        },
+        update: {
+          title: translation.title,
+          goal: translation.goal,
+          precondition: translation.precondition,
+          postcondition: translation.postcondition,
+          mainFlow: translation.mainFlow as any,
+          alternativeFlows: translation.alternativeFlows as any,
+          technicalAppendix: translation.technicalAppendix as any,
+        },
+      });
+    }
 
     void audit('requirement', id, 'UPDATE', req.user.sub, { action: 'usecase_import' });
     return { requirement: updated };

@@ -29,8 +29,13 @@ async function updateModulePath(tx: any, moduleId: string) {
 }
 
 export async function moduleRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/modules', async (_req, reply) => {
+  app.get('/api/modules', async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(200, Number(query.take) || 200));
     const modules = await prisma.module.findMany({
+      skip,
+      take,
       orderBy: [{ path: 'asc' }, { sortOrder: 'asc' }],
     });
     return { modules };

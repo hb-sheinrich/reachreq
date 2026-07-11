@@ -57,7 +57,8 @@ export const useCommentsStore = defineStore('comments', () => {
   function updateCommentInTree(list: Comment[], id: string, patch: Partial<Comment>): boolean {
     for (const c of list) {
       if (c.id === id) {
-        Object.assign(c, patch)
+        const { replies, ...rest } = patch
+        Object.assign(c, rest)
         return true
       }
       if (c.replies?.length && updateCommentInTree(c.replies, id, patch)) return true
