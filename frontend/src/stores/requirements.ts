@@ -67,6 +67,9 @@ export interface Requirement {
   jiraIssueUrl?: string
   jiraIssueCreatedAt?: string
 
+  // Translation state
+  hasTranslation?: boolean
+
   tags: string[]
 }
 
@@ -173,12 +176,6 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return data.translation
   }
 
-  async function importUseCase(id: string, payload: any) {
-    const data = await api.post(`/requirements/${id}/usecase/import`, payload)
-    current.value = data.requirement
-    return data.requirement
-  }
-
   async function fetchLinks(id: string) {
     const data = await api.get(`/requirements/${id}/links`)
     links.value = data
@@ -214,7 +211,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     fetchRequirements, fetchRequirement, createRequirement, updateRequirement,
     submitRequirement, approveRequirement, rejectRequirement, reopenRequirement,
     startEdit, rollbackRequirement, fetchVersions, setReview, createJiraTicket,
-    translateRequirement, importUseCase, fetchLinks, createLink, deleteLink,
+    translateRequirement, fetchLinks, createLink, deleteLink,
     fetchGlossaryLinks, setGlossaryLinks, review,
   }
 })

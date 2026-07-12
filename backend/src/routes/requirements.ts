@@ -107,6 +107,7 @@ async function applyRequirementTranslation(requirement: any, lang: string) {
   if (translation.alternativeFlows !== null) merged.alternativeFlows = translation.alternativeFlows;
   if (translation.technicalAppendix !== null) merged.technicalAppendix = translation.technicalAppendix;
 
+  merged.hasTranslation = true;
   return merged;
 }
 

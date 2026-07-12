@@ -8,6 +8,7 @@ import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useAutosave } from '@/services/autosave'
+import { api } from '@/services/api'
 import { useTitle } from '@/composables/useTitle'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -49,9 +50,6 @@ const gateIgnoreReason = ref('')
 const gateSubmitting = ref(false)
 const appendixEntries = ref<{ key: string; value: string }[]>([])
 const jiraLoading = ref(false)
-const importLoading = ref(false)
-const importError = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
 const pendingAnchor = ref<{ field: string; text: string; start: number; end: number } | null>(null)
 const viewLanguage = ref<'de' | 'en'>('de')
 const translating = ref(false)
@@ -96,7 +94,7 @@ const isEditable = computed(() => {
   return (store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW') && !isTranslation.value
 })
 
-const canTranslate = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage && !translating.value)
+const canTranslate = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage && !store.current?.hasTranslation && !translating.value)
 
 const languageOptions = computed(() => [
   { label: 'DE', value: 'de' },
@@ -241,6 +239,7 @@ async function submit() {
     await store.submitRequirement(id.value, { aiReviewId: aiReview.id })
     reviewTrigger.value++
     await store.fetchVersions(id.value)
+    await loadWithLanguage(viewLanguage.value)
   } finally {
     gateSubmitting.value = false
   }
@@ -249,6 +248,7 @@ async function submit() {
 async function approve() {
   await store.approveRequirement(id.value)
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function confirmSubmitWithIgnore() {
@@ -260,6 +260,7 @@ async function confirmSubmitWithIgnore() {
   showSubmitGate.value = false
   reviewTrigger.value++
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function reject() {
@@ -267,23 +268,28 @@ async function reject() {
   showReject.value = false
   rejectReason.value = ''
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function reopen() {
   await store.reopenRequirement(id.value)
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function rollback() {
   await store.startEdit(id.value)
   await store.fetchVersions(id.value)
-  initDraft()
+  const originalLang = (store.current?.originalLanguage as 'de' | 'en') || 'de'
+  viewLanguage.value = originalLang
+  await loadWithLanguage(originalLang)
   editMode.value = true
 }
 
 async function onReview(payload: { reviewedByCe?: boolean; reviewedByAscShe?: boolean }) {
   await store.setReview(id.value, payload)
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 function onCreateComment(anchor: { field: string; text: string; start: number; end: number }) {
@@ -310,6 +316,7 @@ async function onCreateJira() {
   } finally {
     jiraLoading.value = false
     await store.fetchVersions(id.value)
+    await loadWithLanguage(viewLanguage.value)
   }
 }
 
@@ -322,38 +329,33 @@ async function onRestore(versionId: string) {
   editMode.value = true
 }
 
-function onIgnoreWarnings(reason: string) {
-  store.submitRequirement(id.value, { ignoreWarningsReason: reason })
+async function onIgnoreWarnings(reason: string) {
+  await store.submitRequirement(id.value, { ignoreWarningsReason: reason })
+  reviewTrigger.value++
+  await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function runReview() {
   return await store.review(id.value)
 }
 
-function triggerImport() {
-  fileInput.value?.click()
-}
-
-async function onImportFile(event: Event) {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-  importLoading.value = true
-  importError.value = ''
+async function exportUseCase() {
+  if (!store.current) return
   try {
-    const text = await file.text()
-    const parsed = JSON.parse(text)
-    const payload = Array.isArray(parsed) ? parsed[0] : parsed
-    await store.importUseCase(id.value, payload)
-    await store.fetchVersions(id.value)
-    const originalLang = (store.current?.originalLanguage as 'de' | 'en') || 'de'
-    await loadWithLanguage(originalLang)
-    viewLanguage.value = originalLang
+    const data = await api.get(`/export/usecases/${id.value}.json`)
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const filename = `usecase-${store.current.humanReadableId || store.current.id}.json`
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
   } catch (err: any) {
-    importError.value = err.message || 'Import fehlgeschlagen'
-  } finally {
-    importLoading.value = false
-    if (target) target.value = ''
+    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || 'Export failed', life: 4000 })
   }
 }
 
@@ -584,12 +586,9 @@ function removeAppendixEntry(index: number) {
             </div>
 
             <div class="border-t border-border pt-3 flex flex-wrap gap-2">
-              <Button icon="pi pi-file-import" :label="t('useCase.actions.import')" text size="small" @click="triggerImport" />
+              <Button icon="pi pi-download" :label="t('useCase.actions.export')" text size="small" @click="exportUseCase" />
               <Button icon="pi pi-language" :label="t('useCase.actions.translate')" text size="small" :disabled="!canTranslate" :loading="translating" @click="translateTo(viewLanguage)" />
             </div>
-            <input ref="fileInput" type="file" accept=".json" class="hidden" @change="onImportFile" />
-            <div v-if="importError" class="text-sm text-glossary-alias">{{ importError }}</div>
-            <div v-if="importLoading" class="text-sm text-text-muted">Importiere...</div>
           </aside>
 
           <!-- Document -->

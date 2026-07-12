@@ -7,7 +7,7 @@ import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
 import { useTitle } from '@/composables/useTitle'
 import { useToast } from 'primevue/usetoast'
-import { api, buildQuery } from '@/services/api'
+import { api } from '@/services/api'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -168,25 +168,6 @@ async function searchTags(event: { query: string }) {
   }
 }
 
-async function exportJson() {
-  try {
-    const params = searchParams.value
-    const query = buildQuery(params)
-    const data = await api.get(`/export/usecases.json${query}`)
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `usecases-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
-  } catch (err: any) {
-    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || 'Export failed', life: 4000 })
-  }
-}
-
 function openImportFile() {
   importFileInput.value?.click()
 }
@@ -260,12 +241,6 @@ const importModuleOptions = computed(() =>
         {{ $t('requirements.title') }}
       </h1>
       <div class="flex items-center gap-2">
-        <Button
-          :label="$t('requirements.export')"
-          icon="pi pi-download"
-          severity="secondary"
-          @click="exportJson"
-        />
         <Button
           v-if="auth.isAdmin"
           :label="$t('requirements.import')"
