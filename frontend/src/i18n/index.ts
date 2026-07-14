@@ -62,6 +62,7 @@ export const messages = {
       APPROVED: 'Freigegeben',
       REJECTED: 'Abgelehnt',
       POSTPONED: 'Zurückgestellt',
+      IMPORTED: 'Importiert',
       ARCHIVED: 'Archiviert',
     },
     classification: {
@@ -69,6 +70,7 @@ export const messages = {
       SHOULD_HAVE: 'Soll',
       NICE_TO_HAVE: 'Kann',
       WONT_HAVE: 'Wird nicht',
+      IMPORTED: 'Importiert',
     },
     requirements: {
       title: 'Anforderungen',
@@ -164,6 +166,7 @@ export const messages = {
       APPROVED: 'Approved',
       REJECTED: 'Rejected',
       POSTPONED: 'Postponed',
+      IMPORTED: 'Imported',
       ARCHIVED: 'Archived',
     },
     classification: {
@@ -171,6 +174,7 @@ export const messages = {
       SHOULD_HAVE: 'Should have',
       NICE_TO_HAVE: 'Nice to have',
       WONT_HAVE: "Won't have",
+      IMPORTED: 'Imported',
     },
     requirements: {
       title: 'Requirements',

@@ -16,7 +16,6 @@ export interface ReviewResult {
 
 interface ReviewPayload {
   title: string;
-  category?: string;
   goal?: string;
   precondition?: string;
   postcondition?: string;
@@ -98,11 +97,10 @@ suggestions: Optionale Verbesserungsvorschläge.
   return `Bewerte die folgende Anforderung für Rechtschreibung, Grammatik, Verständlichkeit, Vollständigkeit und Eindeutigkeit.
 
 Titel: ${payload.title}
-Kategorie: ${payload.category ?? ''}
 Ziel: ${payload.goal ?? ''}
 Vorbedingung: ${payload.precondition ?? ''}
 Basisablauf: ${Array.isArray(payload.mainFlow) ? payload.mainFlow.join('\n') : ''}
-Alternative Abläufe: ${Array.isArray(payload.alternativeFlows) ? payload.alternativeFlows.map((f: any) => `[A${f.id ?? ''} nach Schritt ${f.afterStep ?? ''}]\n${f.steps?.join('\n')}`).join('\n') : ''}
+Alternative Abläufe: ${Array.isArray(payload.alternativeFlows) ? payload.alternativeFlows.map((f: any) => `[${f.title || f.id || ''} nach Schritt ${f.afterStep ?? ''}]\n${f.steps?.join('\n')}`).join('\n') : ''}
 Nachbedingung: ${payload.postcondition ?? ''}
 Technischer Anhang: ${JSON.stringify(payload.technicalAppendix ?? {})}
 Klassifizierung: ${payload.classification ?? ''}

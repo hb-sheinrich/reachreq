@@ -3,7 +3,7 @@ export const useCaseMessages = {
     useCase: {
       title: 'Titel',
       id: 'ID',
-      category: 'Kategorie',
+      flowTitle: 'Alternativer Ablauf',
       tags: 'Tags',
       goal: 'Ziel',
       precondition: 'Vorbedingung',
@@ -70,7 +70,7 @@ export const useCaseMessages = {
     useCase: {
       title: 'Title',
       id: 'ID',
-      category: 'Category',
+      flowTitle: 'Alternative Flow',
       tags: 'Tags',
       goal: 'Goal',
       precondition: 'Precondition',

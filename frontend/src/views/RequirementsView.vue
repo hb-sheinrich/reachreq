@@ -42,13 +42,10 @@ const showImport = ref(false)
 const importing = ref(false)
 const importOptions = ref({
   moduleId: '',
-  classification: 'MUST_HAVE' as 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE',
-  status: 'DRAFT' as 'DRAFT' | 'IN_REVIEW',
-  targetLanguage: '' as '' | 'de' | 'en',
 })
 const importFileInput = ref<HTMLInputElement | null>(null)
 const importFileName = ref('')
-const parsedUseCases = ref<unknown[] | null>(null)
+const parsedFile = ref<{ language?: string; originTags?: string[]; useCases?: any[] } | null>(null)
 const tagSuggestions = ref<string[]>([])
 
 useTitle(computed(() => t('requirements.title')))
@@ -118,6 +115,7 @@ const statusOptions = computed(() => [
   { label: t('status.APPROVED'), value: 'APPROVED' },
   { label: t('status.REJECTED'), value: 'REJECTED' },
   { label: t('status.POSTPONED'), value: 'POSTPONED' },
+  { label: t('status.IMPORTED'), value: 'IMPORTED' },
 ])
 
 const classificationOptions = computed(() => [
@@ -126,21 +124,12 @@ const classificationOptions = computed(() => [
   { label: t('classification.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
   { label: t('classification.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
   { label: t('classification.WONT_HAVE'), value: 'WONT_HAVE' },
+  { label: t('classification.IMPORTED'), value: 'IMPORTED' },
 ])
 
-const createClassificationOptions = computed(() => classificationOptions.value.filter((o) => o.value !== ''))
-
-const importClassificationOptions = computed(() => createClassificationOptions.value)
-const importStatusOptions = computed(() => [
-  { label: t('status.DRAFT'), value: 'DRAFT' },
-  { label: t('status.IN_REVIEW'), value: 'IN_REVIEW' },
-])
-
-const languageOptions = computed(() => [
-  { label: t('app.none'), value: '' },
-  { label: 'DE', value: 'de' },
-  { label: 'EN', value: 'en' },
-])
+const createClassificationOptions = computed(() =>
+  classificationOptions.value.filter((o) => o.value !== '' && o.value !== 'IMPORTED')
+)
 
 const statusTokenMap: Record<string, string> = {
   DRAFT: 'draft',
@@ -149,6 +138,7 @@ const statusTokenMap: Record<string, string> = {
   APPROVED: 'approved',
   REJECTED: 'rejected',
   POSTPONED: 'postponed',
+  IMPORTED: 'imported',
 }
 
 function statusStyle(status: string) {
@@ -180,19 +170,21 @@ async function onFileSelect(event: Event) {
   try {
     const text = await file.text()
     const parsed = JSON.parse(text)
-    if (!Array.isArray(parsed)) throw new Error('JSON is not an array')
-    parsedUseCases.value = parsed
-    toast.add({ severity: 'success', summary: t('app.success'), detail: `${parsed.length} items parsed`, life: 3000 })
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.useCases)) {
+      throw new Error('JSON does not match the expected Use-Case 2.0 format')
+    }
+    parsedFile.value = parsed
+    toast.add({ severity: 'success', summary: t('app.success'), detail: `${parsed.useCases.length} use cases parsed`, life: 3000 })
   } catch (err: any) {
-    parsedUseCases.value = null
-    toast.add({ severity: 'error', summary: t('app.error'), detail: t('requirements.invalidJson'), life: 4000 })
+    parsedFile.value = null
+    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || t('requirements.invalidJson'), life: 4000 })
   } finally {
     target.value = ''
   }
 }
 
 async function importUseCases() {
-  if (!parsedUseCases.value || parsedUseCases.value.length === 0) {
+  if (!parsedFile.value || !parsedFile.value.useCases || parsedFile.value.useCases.length === 0) {
     toast.add({ severity: 'warn', summary: t('app.error'), detail: t('requirements.noFile'), life: 3000 })
     return
   }
@@ -202,19 +194,13 @@ async function importUseCases() {
   }
   importing.value = true
   try {
-    const payload: Record<string, unknown> = {
+    const data = await api.post('/import/usecases', {
       moduleId: importOptions.value.moduleId,
-      classification: importOptions.value.classification,
-      status: importOptions.value.status,
-      useCases: parsedUseCases.value,
-    }
-    if (importOptions.value.targetLanguage) {
-      payload.targetLanguage = importOptions.value.targetLanguage
-    }
-    const data = await api.post('/import/usecases', payload)
+      file: parsedFile.value,
+    })
     toast.add({ severity: 'success', summary: t('app.success'), detail: t('requirements.importSuccess', { count: data.created || 0 }), life: 3000 })
     showImport.value = false
-    parsedUseCases.value = null
+    parsedFile.value = null
     importFileName.value = ''
     store.fetchRequirements(searchParams.value)
   } catch (err: any) {
@@ -426,36 +412,16 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectModule')"
           class="w-full"
         />
-        <Select
-          v-model="importOptions.classification"
-          :options="importClassificationOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('requirements.selectClassification')"
-          class="w-full"
-        />
-        <Select
-          v-model="importOptions.status"
-          :options="importStatusOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('requirements.selectStatus')"
-          class="w-full"
-        />
-        <Select
-          v-model="importOptions.targetLanguage"
-          :options="languageOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('requirements.targetLanguage')"
-          class="w-full"
-        />
+        <div v-if="parsedFile" class="text-sm text-text-muted">
+          {{ parsedFile.useCases?.length || 0 }} Use-Cases gefunden
+          <span v-if="parsedFile.language">({{ parsedFile.language }})</span>
+        </div>
         <Button
           :label="$t('requirements.import')"
           icon="pi pi-upload"
           class="w-full"
           :loading="importing"
-          :disabled="!parsedUseCases || !importOptions.moduleId || importing"
+          :disabled="!parsedFile?.useCases?.length || !importOptions.moduleId || importing"
           @click="importUseCases"
         />
       </div>

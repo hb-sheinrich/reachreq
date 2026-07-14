@@ -11,7 +11,7 @@ import { createJiraIssue, buildUseCaseDescription } from '../services/jira.js';
 import { translateUseCase, type UseCase, type UseCaseTranslation } from '../services/translation.js';
 
 function isEditable(status: string) {
-  return status === 'DRAFT' || status === 'IN_REVIEW';
+  return status === 'DRAFT' || status === 'IN_REVIEW' || status === 'IMPORTED';
 }
 
 export function buildRequirementWhere(query: Record<string, string | undefined>) {
@@ -77,7 +77,6 @@ function buildOrderBy(query: Record<string, string | undefined>): any {
 async function buildUseCasePayload(requirement: any): Promise<UseCase> {
   return {
     title: requirement.title,
-    category: requirement.category,
     goal: requirement.goal,
     precondition: requirement.precondition,
     postcondition: requirement.postcondition,
@@ -137,7 +136,6 @@ async function checkAiReview(
     const result = await reviewRequirement({
       type: 'requirement',
       title: data.title,
-      category: data.category ?? undefined,
       goal: data.goal ?? undefined,
       precondition: data.precondition ?? undefined,
       postcondition: data.postcondition ?? undefined,
@@ -209,10 +207,9 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     const schema = z.object({
       moduleId: z.string(),
       title: z.string().min(1),
-      classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).default('MUST_HAVE'),
+      classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE', 'IMPORTED']).default('MUST_HAVE'),
       source: z.string().optional(),
       tags: z.array(z.string()).default([]),
-      category: z.string().optional(),
       goal: z.string().optional(),
       precondition: z.string().optional(),
       postcondition: z.string().optional(),
@@ -246,7 +243,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           humanReadableId: `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
           moduleId: data.moduleId,
           title: data.title,
-          category: data.category,
           goal: data.goal,
           precondition: data.precondition,
           postcondition: data.postcondition,
@@ -312,12 +308,11 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const schema = z.object({
       title: z.string().min(1).optional(),
-      classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).optional(),
+      classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE', 'IMPORTED']).optional(),
       source: z.string().optional().nullable(),
       moduleId: z.string().optional(),
       editVersion: z.number(),
       tags: z.array(z.string()).optional(),
-      category: z.string().optional().nullable(),
       goal: z.string().optional().nullable(),
       precondition: z.string().optional().nullable(),
       postcondition: z.string().optional().nullable(),
@@ -361,7 +356,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
         if (rest.precondition === null) fieldUpdate.precondition = null;
         if (rest.postcondition === null) fieldUpdate.postcondition = null;
         if (rest.technicalAppendix === null) fieldUpdate.technicalAppendix = null;
-        if (rest.category === null) fieldUpdate.category = null;
 
         const updatedCount = await tx.requirement.updateMany({
           where: { id, editVersion },
@@ -422,7 +416,7 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     });
     if (!current) return reply.status(404).send({ error: 'Requirement not found' });
 
-    if (current.status === 'DRAFT' || current.status === 'IN_REVIEW') {
+    if (current.status === 'DRAFT' || current.status === 'IN_REVIEW' || current.status === 'IMPORTED') {
       return { requirement: stripTagObjects(current) };
     }
 
@@ -450,7 +444,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           classification: snapshot.classification,
           moduleId: snapshot.moduleId,
           source: snapshot.source,
-          category: snapshot.category,
           goal: snapshot.goal,
           precondition: snapshot.precondition,
           postcondition: snapshot.postcondition,
@@ -713,7 +706,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
           classification: newVersion.classification,
           moduleId: newVersion.moduleId,
           source: newVersion.source,
-          category: newVersion.category,
           goal: newVersion.goal,
           precondition: newVersion.precondition,
           postcondition: newVersion.postcondition,
@@ -994,7 +986,6 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
       const result = await reviewRequirement({
         type: 'requirement',
         title: current.title,
-        category: current.category ?? undefined,
         goal: current.goal ?? undefined,
         precondition: current.precondition ?? undefined,
         postcondition: current.postcondition ?? undefined,

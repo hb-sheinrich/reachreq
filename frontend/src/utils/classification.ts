@@ -3,6 +3,7 @@ export const classificationClasses: Record<string, string> = {
   SHOULD_HAVE: 'bg-classification-should-bg text-classification-should-fg',
   NICE_TO_HAVE: 'bg-classification-nice-bg text-classification-nice-fg',
   WONT_HAVE: 'bg-classification-wont-bg text-classification-wont-fg',
+  IMPORTED: 'bg-classification-imported-bg text-classification-imported-fg',
 }
 
 export function classificationClass(classification?: string) {

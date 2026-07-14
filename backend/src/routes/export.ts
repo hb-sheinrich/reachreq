@@ -32,11 +32,10 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/export/requirements.csv', async (req, reply) => {
     const query = req.query as Record<string, string | undefined>;
     const requirements = await getRequirementsForExport(query);
-    const header = ['ID', 'Titel', 'Kategorie', 'Ziel', 'Vorbedingung', 'Basisablauf', 'Alternative Abläufe', 'Nachbedingung', 'Technischer Anhang', 'Modul', 'Klassifizierung', 'Status', 'Quelle', 'Autor', 'Erstellt am'];
+    const header = ['ID', 'Titel', 'Ziel', 'Vorbedingung', 'Basisablauf', 'Alternative Abläufe', 'Nachbedingung', 'Technischer Anhang', 'Modul', 'Klassifizierung', 'Status', 'Quelle', 'Autor', 'Erstellt am'];
     const rows = requirements.map((r) => [
       r.humanReadableId,
       r.title,
-      r.category ?? '',
       r.goal ?? '',
       r.precondition ?? '',
       ((r.mainFlow as string[]) ?? []).join('\\n'),
@@ -65,7 +64,6 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
     sheet.columns = [
       { header: 'ID', key: 'id' },
       { header: 'Titel', key: 'title' },
-      { header: 'Kategorie', key: 'category' },
       { header: 'Ziel', key: 'goal' },
       { header: 'Vorbedingung', key: 'precondition' },
       { header: 'Basisablauf', key: 'mainFlow' },
@@ -83,7 +81,6 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
       sheet.addRow({
         id: r.humanReadableId,
         title: r.title,
-        category: r.category ?? '',
         goal: r.goal ?? '',
         precondition: r.precondition ?? '',
         mainFlow: ((r.mainFlow as string[]) ?? []).join('\\n'),
@@ -113,18 +110,18 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
 
     const schema = z.array(z.object({
       title: z.string().min(1),
-      category: z.string().optional(),
       goal: z.string().optional(),
       precondition: z.string().optional(),
       mainFlow: z.array(z.string()).default([]),
       alternativeFlows: z.array(z.object({
         id: z.string().optional(),
         afterStep: z.union([z.string(), z.number()]).optional(),
+        title: z.string().optional(),
         steps: z.array(z.string()).default([]),
       })).default([]),
       postcondition: z.string().optional(),
       technicalAppendix: z.record(z.unknown()).default({}),
-      classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE']).optional(),
+      classification: z.enum(['MUST_HAVE', 'SHOULD_HAVE', 'NICE_TO_HAVE', 'WONT_HAVE', 'IMPORTED']).optional(),
       source: z.string().optional(),
       moduleId: z.string().optional(),
       humanReadableId: z.string().optional(),
@@ -158,7 +155,6 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
           humanReadableId: humanReadableId ?? 'UNKNOWN',
           moduleId: moduleId ?? (await prisma.module.findFirst({ orderBy: { createdAt: 'asc' } }))?.id ?? '',
           title: row.title,
-          category: row.category,
           goal: row.goal,
           precondition: row.precondition,
           mainFlow: row.mainFlow as any,

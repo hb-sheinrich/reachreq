@@ -61,6 +61,7 @@ const classificationOptions = [
   { label: t('classification.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
   { label: t('classification.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
   { label: t('classification.WONT_HAVE'), value: 'WONT_HAVE' },
+  { label: t('classification.IMPORTED'), value: 'IMPORTED' },
 ]
 
 const statusClasses: Record<string, string> = {
@@ -70,6 +71,7 @@ const statusClasses: Record<string, string> = {
   APPROVED: 'bg-status-approved-bg text-status-approved-fg',
   REJECTED: 'bg-status-rejected-bg text-status-rejected-fg',
   POSTPONED: 'bg-status-postponed-bg text-status-postponed-fg',
+  IMPORTED: 'bg-status-imported-bg text-status-imported-fg',
   ARCHIVED: 'bg-status-archived-bg text-status-archived-fg',
 }
 
@@ -91,7 +93,7 @@ function formatDate(value?: string) {
 const isTranslation = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage)
 
 const isEditable = computed(() => {
-  return (store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW') && !isTranslation.value
+  return (store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW' || store.current?.status === 'IMPORTED') && !isTranslation.value
 })
 
 const canTranslate = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage && !store.current?.hasTranslation && !translating.value)
@@ -134,12 +136,12 @@ function initDraft() {
     mainFlow: cloneDeep(source.mainFlow || []),
     alternativeFlows: (source.alternativeFlows || []).map((flow: any) => ({
       id: flow.id,
+      title: flow.title || '',
       afterStep: flow.afterStep ?? flow.branchAt ?? '',
       steps: cloneDeep(flow.steps || ['']),
     })),
     tags: cloneDeep(source.tags || []),
     technicalAppendix: cloneDeep(source.technicalAppendix || {}),
-    category: source.category,
     classification: source.classification,
     moduleId: source.moduleId,
     source: source.source,
@@ -167,7 +169,6 @@ const payload = () => {
     mainFlow: draft.value.mainFlow,
     alternativeFlows: draft.value.alternativeFlows,
     tags: draft.value.tags,
-    category: draft.value.category,
     classification: draft.value.classification,
     moduleId: draft.value.moduleId,
     source: draft.value.source,
@@ -403,7 +404,7 @@ function addMainStep() {
 }
 
 function addAlternativeFlow() {
-  draft.value.alternativeFlows.push({ afterStep: '', steps: [''] })
+  draft.value.alternativeFlows.push({ title: '', afterStep: '', steps: [''] })
 }
 
 function removeAlternativeFlow(flowIndex: number) {
@@ -475,7 +476,7 @@ function removeAppendixEntry(index: number) {
           @click="toggleEdit"
         />
         <Button
-          v-if="store.current.status === 'DRAFT' || store.current.status === 'IN_REVIEW'"
+          v-if="store.current.status === 'DRAFT' || store.current.status === 'IN_REVIEW' || store.current.status === 'IMPORTED'"
           icon="pi pi-send"
           :label="t('useCase.actions.submit')"
           @click="submit"
@@ -500,7 +501,7 @@ function removeAppendixEntry(index: number) {
           @click="reopen"
         />
         <Button
-          v-if="store.current.status !== 'DRAFT' && store.current.status !== 'IN_REVIEW'"
+          v-if="store.current.status !== 'DRAFT' && store.current.status !== 'IN_REVIEW' && store.current.status !== 'IMPORTED'"
           icon="pi pi-undo"
           :label="t('useCase.actions.rollback')"
           text
@@ -541,12 +542,6 @@ function removeAppendixEntry(index: number) {
                 option-value="value"
                 class="w-full"
               />
-            </div>
-
-            <div class="space-y-1">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</div>
-              <div v-if="!editMode" class="text-text">{{ store.current.category || '–' }}</div>
-              <InputText v-else v-model="draft.category" :placeholder="t('useCase.category')" class="w-full" />
             </div>
 
             <div class="space-y-1">
@@ -682,10 +677,14 @@ function removeAppendixEntry(index: number) {
                   class="border border-border rounded-card p-4 bg-surface-2"
                 >
                   <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                      <span class="px-2 py-1 rounded-field bg-border text-text font-mono text-sm">A{{ flowIndex + 1 }}</span>
-                      <div class="flex items-center gap-2">
-                        <span class="text-sm text-text-muted">{{ t('useCase.mainFlow') }}:</span>
+                    <div class="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                      <div class="flex items-center gap-3">
+                        <span class="px-2 py-1 rounded-field bg-border text-text font-mono text-sm">A{{ flowIndex + 1 }}</span>
+                        <span v-if="!editMode" class="font-medium text-text">{{ flow.title || `${t('useCase.flowTitle')} ${flowIndex + 1}` }}</span>
+                        <InputText v-else v-model="flow.title" :placeholder="`${t('useCase.flowTitle')} ${flowIndex + 1}`" class="w-full sm:w-64" />
+                      </div>
+                      <div class="flex items-center gap-2 text-sm">
+                        <span class="text-text-muted">{{ t('useCase.mainFlow') }}:</span>
                         <span v-if="!editMode" class="font-mono text-text">{{ flow.afterStep || '–' }}</span>
                         <InputText v-else v-model="flow.afterStep" placeholder="z.B. 2" class="w-20" />
                       </div>

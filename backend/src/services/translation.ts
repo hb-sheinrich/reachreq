@@ -2,9 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getEnv } from '../lib/env.js';
 
 export interface UseCase {
-  id?: string;
   title: string;
-  category?: string | null;
   goal?: string | null;
   precondition?: string | null;
   postcondition?: string | null;
@@ -17,7 +15,6 @@ export interface UseCase {
 
 export interface UseCaseTranslation {
   title?: string | null;
-  category?: string | null;
   goal?: string | null;
   precondition?: string | null;
   postcondition?: string | null;
@@ -65,7 +62,7 @@ function safeParseJson<T>(text: string): T | null {
 
 export async function translateUseCase(payload: UseCase, targetLang: 'de' | 'en'): Promise<UseCaseTranslation> {
   const model = getEnv().ANTHROPIC_MODEL;
-  const keys = ['title', 'category', 'goal', 'precondition', 'postcondition', 'mainFlow', 'alternativeFlows', 'technicalAppendix', 'aliases'];
+  const keys = ['title', 'goal', 'precondition', 'postcondition', 'mainFlow', 'alternativeFlows', 'technicalAppendix', 'aliases'];
 
   const response = await getClient().messages.create(
     {
@@ -94,7 +91,6 @@ export async function translateUseCase(payload: UseCase, targetLang: 'de' | 'en'
 
   return {
     title: parsed.title ?? null,
-    category: parsed.category ?? null,
     goal: parsed.goal ?? null,
     precondition: parsed.precondition ?? null,
     postcondition: parsed.postcondition ?? null,

@@ -29,8 +29,8 @@ export interface Requirement {
   humanReadableId: string
   moduleId: string
   title: string
-  classification: 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE'
-  status: 'DRAFT' | 'IN_REVIEW' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'POSTPONED'
+  classification: 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE' | 'IMPORTED'
+  status: 'DRAFT' | 'IN_REVIEW' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'POSTPONED' | 'IMPORTED'
   source?: string
   authorId: string
   currentVersionId?: string
@@ -45,12 +45,11 @@ export interface Requirement {
   _count?: { comments: number }
 
   // Use-Case 2.0 fields
-  category?: string
   goal?: string
   precondition?: string
   postcondition?: string
   mainFlow: string[]
-  alternativeFlows: { id?: string; afterStep?: string | number; branchAt?: string | number; steps: string[] }[]
+  alternativeFlows: { id?: string; title?: string; afterStep?: string | number; branchAt?: string | number; steps: string[] }[]
   technicalAppendix?: Record<string, unknown>
   originalLanguage?: 'de' | 'en'
 

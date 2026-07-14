@@ -20,6 +20,7 @@ enum RequirementStatus {
   APPROVED
   REJECTED
   POSTPONED
+  IMPORTED
 }
 
 enum RequirementClassification {
@@ -27,6 +28,7 @@ enum RequirementClassification {
   SHOULD_HAVE
   NICE_TO_HAVE
   WONT_HAVE
+  IMPORTED
 }
 
 enum CommentStatus {
@@ -137,7 +139,6 @@ model Requirement {
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
 
-  category          String?
   goal              String?  @db.Text
   precondition      String?  @db.Text
   postcondition     String?  @db.Text
@@ -201,7 +202,6 @@ model RequirementVersion {
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
 
-  category          String?
   goal              String?  @db.Text
   precondition      String?  @db.Text
   postcondition     String?  @db.Text
