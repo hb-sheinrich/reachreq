@@ -32,9 +32,7 @@ onMounted(async () => {
   counts.value = reqData.counts || {}
 })
 
-const visibleStatuses = computed(() =>
-  statusOrder.filter((status) => counts.value[status] !== undefined)
-)
+const visibleStatuses = computed(() => statusOrder)
 </script>
 
 <template>
