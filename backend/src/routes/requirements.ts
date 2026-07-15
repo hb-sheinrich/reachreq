@@ -201,6 +201,18 @@ export async function requirementRoutes(app: FastifyInstance): Promise<void> {
     return { requirements: requirements.map(stripTagObjects), total };
   });
 
+  app.get('/api/requirements/counts', async (_req: FastifyRequest, _reply: FastifyReply) => {
+    const groups = await prisma.requirement.groupBy({
+      by: ['status'],
+      _count: { status: true },
+    });
+    const counts: Record<string, number> = {};
+    for (const group of groups) {
+      counts[group.status] = group._count.status;
+    }
+    return { counts };
+  });
+
   app.post('/api/requirements', async (req: FastifyRequest, reply: FastifyReply) => {
     if (!requireWrite(req, reply)) return;
 

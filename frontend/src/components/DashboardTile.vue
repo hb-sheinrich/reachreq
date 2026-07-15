@@ -6,18 +6,27 @@ const props = defineProps<{
   to: RouteLocationRaw
   label: string
   count: number
-  status: 'draft' | 'in-review' | 'submitted' | 'approved'
+  status: string
 }>()
 
 const borderColor = computed(() => {
-  const map: Record<string, string> = {
-    draft: 'var(--status-draft-fg)',
-    'in-review': 'var(--status-in-review-fg)',
-    submitted: 'var(--status-submitted-fg)',
-    approved: 'var(--status-approved-fg)',
-  }
-  return map[props.status]
+  const token = statusToken(props.status)
+  return `var(--status-${token}-fg)`
 })
+
+function statusToken(status: string): string {
+  const map: Record<string, string> = {
+    DRAFT: 'draft',
+    IN_REVIEW: 'in-review',
+    SUBMITTED_FOR_RELEASE: 'submitted',
+    APPROVED: 'approved',
+    REJECTED: 'rejected',
+    POSTPONED: 'postponed',
+    IMPORTED: 'imported',
+    ARCHIVED: 'archived',
+  }
+  return map[status] || status.toLowerCase().replace(/_/g, '-')
+}
 </script>
 
 <template>
