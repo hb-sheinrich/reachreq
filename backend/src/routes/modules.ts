@@ -53,7 +53,7 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
 
     const schema = z.object({
       name: z.string().min(1),
-      code: z.string().min(1).max(10),
+      code: z.string().min(1).max(50),
       description: z.string().optional(),
       parentId: z.string().optional().nullable(),
       sortOrder: z.number().default(0),
@@ -90,7 +90,7 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const schema = z.object({
       name: z.string().min(1).optional(),
-      code: z.string().min(1).max(10).optional(),
+      code: z.string().min(1).max(50).optional(),
       description: z.string().optional().nullable(),
       parentId: z.string().optional().nullable(),
       sortOrder: z.number().optional(),
