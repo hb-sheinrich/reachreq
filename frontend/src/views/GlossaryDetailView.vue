@@ -282,7 +282,7 @@ const canTranslate = computed(() => {
         </div>
       </TabPanel>
       <TabPanel value="1" :header="$t('app.review')">
-        <AIReviewPanel :key="reviewTrigger" :review-fn="runReview" />
+        <AIReviewPanel :key="reviewTrigger" :auto-run="reviewTrigger > 0" :review-fn="runReview" />
       </TabPanel>
       <TabPanel value="2" :header="$t('glossary.versions')">
         <ul class="space-y-2">
