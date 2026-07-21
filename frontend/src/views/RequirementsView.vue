@@ -7,14 +7,15 @@ import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
 import { useTitle } from '@/composables/useTitle'
 import { useToast } from 'primevue/usetoast'
-import { api, buildQuery } from '@/services/api'
+import { api } from '@/services/api'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import AutoComplete from 'primevue/autocomplete'
 import Dialog from 'primevue/dialog'
+import { classificationClass } from '@/utils/classification'
 
 const router = useRouter()
 const route = useRoute()
@@ -31,21 +32,20 @@ const filters = ref({
   moduleId: '',
   tags: [] as string[],
 })
+const sortField = ref('')
+const sortOrder = ref(0)
 const showCreate = ref(false)
 const creating = ref(false)
-const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE', description: '' })
+const newReq = ref<Partial<Requirement>>({ title: '', moduleId: '', classification: 'MUST_HAVE' })
 
 const showImport = ref(false)
 const importing = ref(false)
 const importOptions = ref({
   moduleId: '',
-  classification: 'MUST_HAVE' as 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE',
-  status: 'DRAFT' as 'DRAFT' | 'IN_REVIEW',
-  targetLanguage: '' as '' | 'de' | 'en',
 })
 const importFileInput = ref<HTMLInputElement | null>(null)
 const importFileName = ref('')
-const parsedUseCases = ref<unknown[] | null>(null)
+const parsedFile = ref<{ language?: string; originTags?: string[]; useCases?: any[] } | null>(null)
 const tagSuggestions = ref<string[]>([])
 
 useTitle(computed(() => t('requirements.title')))
@@ -72,6 +72,8 @@ function getSearchParams() {
     classification: filters.value.classification,
     moduleId: filters.value.moduleId,
     tags: filters.value.tags.join(','),
+    sortField: sortField.value,
+    sortOrder: String(sortOrder.value),
   }
 }
 
@@ -81,12 +83,23 @@ function search() {
   store.fetchRequirements(searchParams.value)
 }
 
+function filterTag(name: string) {
+  filters.value.tags = [name]
+  search()
+}
+
+function onSort(event: { sortField: string | ((item: any) => string) | undefined; sortOrder: 1 | 0 | -1 | undefined | null }) {
+  sortField.value = typeof event.sortField === 'string' ? event.sortField : ''
+  sortOrder.value = event.sortOrder ?? 0
+  search()
+}
+
 async function create() {
   if (creating.value) return
   creating.value = true
   try {
     const req = await store.createRequirement(newReq.value)
-    newReq.value = { title: '', moduleId: '', classification: 'MUST_HAVE', description: '' }
+    newReq.value = { title: '', moduleId: '', classification: 'MUST_HAVE' }
     showCreate.value = false
     router.push({ name: 'RequirementDetail', params: { id: req.id } })
   } finally {
@@ -102,6 +115,7 @@ const statusOptions = computed(() => [
   { label: t('status.APPROVED'), value: 'APPROVED' },
   { label: t('status.REJECTED'), value: 'REJECTED' },
   { label: t('status.POSTPONED'), value: 'POSTPONED' },
+  { label: t('status.IMPORTED'), value: 'IMPORTED' },
 ])
 
 const classificationOptions = computed(() => [
@@ -110,21 +124,12 @@ const classificationOptions = computed(() => [
   { label: t('classification.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
   { label: t('classification.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
   { label: t('classification.WONT_HAVE'), value: 'WONT_HAVE' },
+  { label: t('classification.IMPORTED'), value: 'IMPORTED' },
 ])
 
-const createClassificationOptions = computed(() => classificationOptions.value.filter((o) => o.value !== ''))
-
-const importClassificationOptions = computed(() => createClassificationOptions.value)
-const importStatusOptions = computed(() => [
-  { label: t('status.DRAFT'), value: 'DRAFT' },
-  { label: t('status.IN_REVIEW'), value: 'IN_REVIEW' },
-])
-
-const languageOptions = computed(() => [
-  { label: t('app.none'), value: '' },
-  { label: 'DE', value: 'de' },
-  { label: 'EN', value: 'en' },
-])
+const createClassificationOptions = computed(() =>
+  classificationOptions.value.filter((o) => o.value !== '' && o.value !== 'IMPORTED')
+)
 
 const statusTokenMap: Record<string, string> = {
   DRAFT: 'draft',
@@ -133,13 +138,7 @@ const statusTokenMap: Record<string, string> = {
   APPROVED: 'approved',
   REJECTED: 'rejected',
   POSTPONED: 'postponed',
-}
-
-const classificationTokenMap: Record<string, string> = {
-  MUST_HAVE: 'must',
-  SHOULD_HAVE: 'should',
-  NICE_TO_HAVE: 'could',
-  WONT_HAVE: 'wont',
+  IMPORTED: 'imported',
 }
 
 function statusStyle(status: string) {
@@ -150,39 +149,12 @@ function statusStyle(status: string) {
   }
 }
 
-function classificationStyle(classification: string) {
-  const token = classificationTokenMap[classification] || classification.toLowerCase().replace(/_/g, '-')
-  return {
-    backgroundColor: `var(--classification-${token}-bg)`,
-    color: `var(--classification-${token}-fg)`,
-  }
-}
-
 async function searchTags(event: { query: string }) {
   try {
     const data = await api.get(`/tags?search=${encodeURIComponent(event.query)}`)
     tagSuggestions.value = (data.tags || []).map((t: { name: string }) => t.name)
   } catch {
     tagSuggestions.value = []
-  }
-}
-
-async function exportJson() {
-  try {
-    const params = searchParams.value
-    const query = buildQuery(params)
-    const data = await api.get(`/export/usecases.json${query}`)
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `usecases-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
-  } catch (err: any) {
-    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || 'Export failed', life: 4000 })
   }
 }
 
@@ -198,19 +170,21 @@ async function onFileSelect(event: Event) {
   try {
     const text = await file.text()
     const parsed = JSON.parse(text)
-    if (!Array.isArray(parsed)) throw new Error('JSON is not an array')
-    parsedUseCases.value = parsed
-    toast.add({ severity: 'success', summary: t('app.success'), detail: `${parsed.length} items parsed`, life: 3000 })
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.useCases)) {
+      throw new Error('JSON does not match the expected Use-Case 2.0 format')
+    }
+    parsedFile.value = parsed
+    toast.add({ severity: 'success', summary: t('app.success'), detail: `${parsed.useCases.length} use cases parsed`, life: 3000 })
   } catch (err: any) {
-    parsedUseCases.value = null
-    toast.add({ severity: 'error', summary: t('app.error'), detail: t('requirements.invalidJson'), life: 4000 })
+    parsedFile.value = null
+    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || t('requirements.invalidJson'), life: 4000 })
   } finally {
     target.value = ''
   }
 }
 
 async function importUseCases() {
-  if (!parsedUseCases.value || parsedUseCases.value.length === 0) {
+  if (!parsedFile.value || !parsedFile.value.useCases || parsedFile.value.useCases.length === 0) {
     toast.add({ severity: 'warn', summary: t('app.error'), detail: t('requirements.noFile'), life: 3000 })
     return
   }
@@ -220,19 +194,13 @@ async function importUseCases() {
   }
   importing.value = true
   try {
-    const payload: Record<string, unknown> = {
+    const data = await api.post('/import/usecases', {
       moduleId: importOptions.value.moduleId,
-      classification: importOptions.value.classification,
-      status: importOptions.value.status,
-      useCases: parsedUseCases.value,
-    }
-    if (importOptions.value.targetLanguage) {
-      payload.targetLanguage = importOptions.value.targetLanguage
-    }
-    const data = await api.post('/import/usecases', payload)
+      file: parsedFile.value,
+    })
     toast.add({ severity: 'success', summary: t('app.success'), detail: t('requirements.importSuccess', { count: data.created || 0 }), life: 3000 })
     showImport.value = false
-    parsedUseCases.value = null
+    parsedFile.value = null
     importFileName.value = ''
     store.fetchRequirements(searchParams.value)
   } catch (err: any) {
@@ -260,15 +228,10 @@ const importModuleOptions = computed(() =>
       </h1>
       <div class="flex items-center gap-2">
         <Button
-          :label="$t('requirements.export')"
-          icon="pi pi-download"
-          severity="secondary"
-          @click="exportJson"
-        />
-        <Button
           v-if="auth.isAdmin"
           :label="$t('requirements.import')"
           icon="pi pi-upload"
+          severity="secondary"
           @click="showImport = true"
         />
         <Button
@@ -285,21 +248,21 @@ const importModuleOptions = computed(() =>
         class="w-64"
         @keyup.enter="search"
       />
-      <Dropdown
+      <Select
         v-model="filters.status"
         :options="statusOptions"
         option-label="label"
         option-value="value"
         :placeholder="$t('app.status')"
       />
-      <Dropdown
+      <Select
         v-model="filters.classification"
         :options="classificationOptions"
         option-label="label"
         option-value="value"
         :placeholder="$t('app.classification')"
       />
-      <Dropdown
+      <Select
         v-model="filters.moduleId"
         :options="moduleOptions"
         option-label="label"
@@ -326,10 +289,17 @@ const importModuleOptions = computed(() =>
       :rows="50"
       :total-records="store.total"
       lazy
+      :sort-field="sortField"
+      :sort-order="sortOrder"
       @page="(e) => store.fetchRequirements({ ...searchParams, skip: e.first, take: e.rows })"
+      @sort="onSort"
     >
-      <Column field="humanReadableId" :header="$t('requirements.id')" />
-      <Column field="title" :header="$t('requirements.titleColumn')">
+      <Column field="humanReadableId" :header="$t('requirements.id')" sortable>
+        <template #body="{ data }">
+          <span class="font-mono text-text">{{ data.humanReadableId }}</span>
+        </template>
+      </Column>
+      <Column field="title" :header="$t('requirements.titleColumn')" sortable>
         <template #body="{ data }">
           <router-link
             :to="{ name: 'RequirementDetail', params: { id: data.id } }"
@@ -339,8 +309,8 @@ const importModuleOptions = computed(() =>
           </router-link>
         </template>
       </Column>
-      <Column field="module.name" :header="$t('app.module')" />
-      <Column field="status" :header="$t('app.status')">
+      <Column field="module.name" :header="$t('app.module')" sortable />
+      <Column field="status" :header="$t('app.status')" sortable>
         <template #body="{ data }">
           <span
             class="px-2 py-1 rounded-pill text-sm font-medium"
@@ -350,38 +320,64 @@ const importModuleOptions = computed(() =>
           </span>
         </template>
       </Column>
-      <Column field="classification" :header="$t('app.classification')">
+      <Column field="classification" :header="$t('app.classification')" sortable>
         <template #body="{ data }">
           <span
-            class="px-2 py-1 rounded-pill text-sm font-medium"
-            :style="classificationStyle(data.classification)"
+            class="px-2 py-1 rounded-pill text-sm font-medium font-mono"
+            :class="classificationClass(data.classification)"
           >
-            {{ $t(`classification.${data.classification}`) }}
+            {{ data.classification }}
           </span>
         </template>
       </Column>
-      <Column field="author.name" :header="$t('app.author')" />
+      <Column field="tags" :header="$t('requirements.tags')">
+        <template #body="{ data }">
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="tag in data.tags || []"
+              :key="tag"
+              type="button"
+              :title="$t('requirements.tagClickHint')"
+              class="px-2 py-0.5 rounded-pill bg-surface-2 text-text-muted text-xs font-mono hover:bg-border transition-colors"
+              @click="filterTag(tag)"
+            >
+              {{ tag }}
+            </button>
+            <span v-if="!(data.tags || []).length" class="text-text-subtle text-sm">–</span>
+          </div>
+        </template>
+      </Column>
+      <Column field="author.name" :header="$t('app.author')" sortable />
     </DataTable>
 
     <Dialog v-model:visible="showCreate" :header="$t('requirements.new')" modal>
-      <div class="space-y-3 min-w-96">
-        <InputText v-model="newReq.title" :placeholder="$t('requirements.titleColumn')" class="w-full" />
-        <Dropdown
-          v-model="newReq.moduleId"
-          :options="modulesStore.modules"
-          option-label="name"
-          option-value="id"
-          :placeholder="$t('app.module')"
-          class="w-full"
-        />
-        <Dropdown
-          v-model="newReq.classification"
-          :options="createClassificationOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('app.classification')"
-          class="w-full"
-        />
+      <div class="space-y-4 min-w-96">
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('requirements.titleColumn') }}</label>
+          <InputText v-model="newReq.title" :placeholder="$t('requirements.titleColumn')" class="w-full mt-1" />
+        </div>
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.module') }}</label>
+          <Select
+            v-model="newReq.moduleId"
+            :options="modulesStore.modules"
+            option-label="name"
+            option-value="id"
+            :placeholder="$t('app.module')"
+            class="w-full mt-1"
+          />
+        </div>
+        <div>
+          <label class="text-label uppercase tracking-wide text-text-muted">{{ $t('app.classification') }}</label>
+          <Select
+            v-model="newReq.classification"
+            :options="createClassificationOptions"
+            option-label="label"
+            option-value="value"
+            :placeholder="$t('app.classification')"
+            class="w-full mt-1"
+          />
+        </div>
         <Button
           :label="$t('app.create')"
           class="w-full"
@@ -408,7 +404,7 @@ const importModuleOptions = computed(() =>
           class="w-full"
           @click="openImportFile"
         />
-        <Dropdown
+        <Select
           v-model="importOptions.moduleId"
           :options="importModuleOptions"
           option-label="label"
@@ -416,36 +412,16 @@ const importModuleOptions = computed(() =>
           :placeholder="$t('requirements.selectModule')"
           class="w-full"
         />
-        <Dropdown
-          v-model="importOptions.classification"
-          :options="importClassificationOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('requirements.selectClassification')"
-          class="w-full"
-        />
-        <Dropdown
-          v-model="importOptions.status"
-          :options="importStatusOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('requirements.selectStatus')"
-          class="w-full"
-        />
-        <Dropdown
-          v-model="importOptions.targetLanguage"
-          :options="languageOptions"
-          option-label="label"
-          option-value="value"
-          :placeholder="$t('requirements.targetLanguage')"
-          class="w-full"
-        />
+        <div v-if="parsedFile" class="text-sm text-text-muted">
+          {{ parsedFile.useCases?.length || 0 }} Use-Cases gefunden
+          <span v-if="parsedFile.language">({{ parsedFile.language }})</span>
+        </div>
         <Button
           :label="$t('requirements.import')"
           icon="pi pi-upload"
           class="w-full"
           :loading="importing"
-          :disabled="!parsedUseCases || !importOptions.moduleId || importing"
+          :disabled="!parsedFile?.useCases?.length || !importOptions.moduleId || importing"
           @click="importUseCases"
         />
       </div>

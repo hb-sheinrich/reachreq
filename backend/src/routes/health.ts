@@ -14,7 +14,37 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const pong = await getRedis().ping();
+      const redis = getRedis();
+      const waitReady = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Redis timeout')), 5000);
+        if (redis.status === 'ready') {
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
+        if (redis.status === 'wait' || redis.status === 'end') {
+          redis.connect().catch(reject);
+        }
+        const onReady = () => {
+          clearTimeout(timeout);
+          redis.off('ready', onReady);
+          redis.off('error', onError);
+          resolve();
+        };
+        const onError = (err: Error) => {
+          clearTimeout(timeout);
+          redis.off('ready', onReady);
+          redis.off('error', onError);
+          reject(err);
+        };
+        redis.once('ready', onReady);
+        redis.once('error', onError);
+      });
+      await waitReady;
+      const pong = await Promise.race([
+        redis.ping(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 5000)),
+      ]);
       checks.redis = pong === 'PONG' ? 'ok' : 'error';
     } catch {
       checks.redis = 'error';

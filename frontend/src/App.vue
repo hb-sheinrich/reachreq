@@ -18,8 +18,7 @@ const { syncFromUser } = useLanguage()
 
 const { syncFromUser: syncThemeFromUser } = useTheme()
 
-onMounted(async () => {
-  await auth.fetchUser()
+onMounted(() => {
   syncFromUser(auth.user?.locale)
   syncThemeFromUser(auth.user?.theme)
 })

@@ -5,8 +5,8 @@ import { signToken } from '../lib/jwt.js';
 import type { FastifyInstance } from 'fastify';
 
 let app: FastifyInstance;
-const adminToken = signToken({ sub: 'test-admin', email: 'admin@haiberg.com', name: 'Test Admin', isAdmin: true });
-const userToken = signToken({ sub: 'test-user', email: 'user@haiberg.com', name: 'Test User', isAdmin: false });
+const adminToken = signToken({ sub: 'test-admin', email: 'admin@haiberg.com', name: 'Test Admin', role: 'ADMIN', isAdmin: true });
+const userToken = signToken({ sub: 'test-user', email: 'user@haiberg.com', name: 'Test User', role: 'CONTRIBUTOR', isAdmin: false });
 
 async function createModule() {
   const code = `LOG${Math.random().toString(36).slice(2, 8)}`.toUpperCase();

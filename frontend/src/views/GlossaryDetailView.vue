@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, onBeforeRouteUpdate, onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useGlossaryStore, type GlossaryTranslation } from '@/stores/glossary'
 import { useAuthStore } from '@/stores/auth'
@@ -11,7 +11,7 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import InputChips from 'primevue/inputchips'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import TabPanel from 'primevue/tabpanel'
 import TabView from 'primevue/tabview'
 import Dialog from 'primevue/dialog'
@@ -28,6 +28,7 @@ const toast = useToast()
 
 const id = computed(() => route.params.id as string)
 const draft = ref<any>({})
+const ready = ref(false)
 const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
@@ -42,6 +43,7 @@ onMounted(async () => {
   await store.fetchEntry(id.value)
   await store.fetchVersions(id.value)
   await loadTranslation()
+  initDraft()
 })
 
 watch(id, async (newId) => {
@@ -49,17 +51,17 @@ watch(id, async (newId) => {
   await store.fetchEntry(newId)
   await store.fetchVersions(newId)
   await loadTranslation()
+  initDraft()
 })
 
-watch(() => store.current, (entry) => {
-  if (entry) {
-    draft.value = {
-      ...entry,
-      tags: (entry.tags || []).join(', '),
-      aliases: entry.aliases || [],
-      originalLanguage: entry.originalLanguage || 'de',
-    }
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.params.id !== from.params.id) {
+    await forceSave(from.params.id as string)
   }
+})
+
+onBeforeRouteLeave(async () => {
+  await forceSave()
 })
 
 watch(viewLanguage, () => {
@@ -67,21 +69,50 @@ watch(viewLanguage, () => {
   loadTranslation()
 })
 
-function payload() {
-  return {
-    ...draft.value,
-    tags: draft.value.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
-    aliases: (draft.value.aliases || []).map((a: string) => a.trim()).filter(Boolean),
+function cloneDeep<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
   }
 }
 
-const { status, statusMessage, forceSave, setupWatch } = useAutosave(
-  id.value,
+function initDraft() {
+  if (!store.current) return
+  ready.value = false
+  const entry = store.current
+  draft.value = {
+    term: entry.term,
+    definition: entry.definition,
+    example: entry.example,
+    tags: (entry.tags || []).join(', '),
+    aliases: cloneDeep(entry.aliases || []),
+    originalLanguage: entry.originalLanguage || 'de',
+    moduleId: entry.moduleId,
+  }
+  ready.value = true
+  setBaseline()
+}
+
+function payload() {
+  return {
+    term: draft.value.term,
+    definition: draft.value.definition,
+    example: draft.value.example || null,
+    tags: (draft.value?.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean),
+    aliases: ((draft.value?.aliases || []) as string[]).map((a: string) => a.trim()).filter(Boolean),
+    originalLanguage: draft.value.originalLanguage,
+    moduleId: draft.value.moduleId || null,
+  }
+}
+
+const { status, statusMessage, forceSave, setupWatch, setBaseline } = useAutosave(
+  id,
   payload,
-  (data) => store.updateEntry(id.value, data)
+  (targetId, data) => store.updateEntry(targetId, data)
 )
 
-setupWatch(draft)
+setupWatch(draft, ready)
 
 async function loadTranslation() {
   if (!store.current) return
@@ -169,7 +200,7 @@ const canTranslate = computed(() => {
 
     <div class="flex flex-wrap gap-2 items-center p-3 rounded-card bg-surface border border-border">
       <label class="text-sm text-text-muted">{{ $t('glossary.viewLanguage') }}</label>
-      <Dropdown
+      <Select
         v-model="viewLanguage"
         :options="languageOptions"
         option-label="label"
@@ -235,7 +266,7 @@ const canTranslate = computed(() => {
           </div>
           <div class="space-y-1">
             <label class="text-label uppercase text-text-muted">{{ $t('glossary.originalLanguage') }}</label>
-            <Dropdown
+            <Select
               v-model="draft.originalLanguage"
               :options="languageOptions"
               option-label="label"
@@ -251,7 +282,7 @@ const canTranslate = computed(() => {
         </div>
       </TabPanel>
       <TabPanel value="1" :header="$t('app.review')">
-        <AIReviewPanel :key="reviewTrigger" :review-fn="runReview" />
+        <AIReviewPanel :key="reviewTrigger" :auto-run="reviewTrigger > 0" :review-fn="runReview" />
       </TabPanel>
       <TabPanel value="2" :header="$t('glossary.versions')">
         <ul class="space-y-2">

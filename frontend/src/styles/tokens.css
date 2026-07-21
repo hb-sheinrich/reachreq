@@ -72,6 +72,8 @@
   --status-rejected-bg: #fee2e2;
   --status-postponed-fg: #6b7280;
   --status-postponed-bg: #f3f4f6;
+  --status-imported-fg: #4c1d95;
+  --status-imported-bg: #ede9fe;
   --status-archived-fg: #64748b;
   --status-archived-bg: #e2e8f0;
 
@@ -86,6 +88,8 @@
   --classification-nice-bg: #0ea5e9;
   --classification-wont-fg: #0f172a;
   --classification-wont-bg: #64748b;
+  --classification-imported-fg: #4c1d95;
+  --classification-imported-bg: #ede9fe;
 
   /* Glossar highlighting */
   --glossary-defined: #10b981;
@@ -124,6 +128,8 @@
   --status-rejected-bg: rgba(239, 68, 68, 0.15);
   --status-postponed-fg: #d1d5db;
   --status-postponed-bg: rgba(107, 114, 128, 0.15);
+  --status-imported-fg: #ddd6fe;
+  --status-imported-bg: rgba(124, 58, 237, 0.15);
   --status-archived-fg: #cbd5e1;
   --status-archived-bg: rgba(100, 116, 139, 0.15);
 
@@ -137,6 +143,8 @@
   --classification-nice-bg: #0369a1;
   --classification-wont-fg: #f1f5f9;
   --classification-wont-bg: #475569;
+  --classification-imported-fg: #ddd6fe;
+  --classification-imported-bg: rgba(124, 58, 237, 0.15);
 
   --glossary-defined: #34d399;
   --glossary-alias: #f87171;

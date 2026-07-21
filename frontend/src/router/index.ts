@@ -19,6 +19,8 @@ router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
   if (to.name !== 'Login' && to.name !== 'Callback' && !auth.isAuthenticated) {
     next({ name: 'Login' })
+  } else if (to.name === 'Login' && auth.isAuthenticated) {
+    next({ name: 'Home' })
   } else {
     next()
   }

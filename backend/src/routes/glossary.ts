@@ -4,16 +4,9 @@ import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
 import { reviewGlossary } from '../services/ai.js';
 import { getEnv } from '../lib/env.js';
+import { requireWrite, requireAdmin } from '../lib/auth.js';
 import { createGlossaryVersion } from '../services/versions.js';
 import { translateGlossaryEntry, type GlossaryEntryPayload, type GlossaryTranslation } from '../services/translation.js';
-
-function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  if (!req.user.isAdmin) {
-    reply.status(403).send({ error: 'Admin permission required' });
-    return false;
-  }
-  return true;
-}
 
 function normalizeAliases(aliases: string[]): string[] {
   return [...new Set(aliases.map((a) => a.trim()).filter(Boolean))];
@@ -55,18 +48,25 @@ async function checkAiReview(
   data: any,
   authorId: string
 ) {
-  if (!getEnv().ANTHROPIC_API_KEY) return { ok: true };
+  if (!getEnv().ANTHROPIC_API_KEY) {
+    if (getEnv().NODE_ENV === 'test') return { ok: true };
+    return { ok: false, message: 'KI-Prüfung nicht verfügbar' };
+  }
 
   let review = null;
   if (aiReviewId) {
-    review = await prisma.aIReview.findUnique({ where: { id: aiReviewId } });
+    review = await prisma.aIReview.findFirst({
+      where: { id: aiReviewId, glossaryEntryId, status: 'COMPLETED' },
+    });
+    if (!review) {
+      return { ok: false, message: 'KI-Prüfung nicht gültig oder veraltet' };
+    }
   }
 
   if (!review) {
     const result = await reviewGlossary({
       type: 'glossary',
       title: data.term,
-      description: data.definition,
       term: data.term,
       definition: data.definition,
       example: data.example ?? undefined,
@@ -83,6 +83,10 @@ async function checkAiReview(
 
   if (review.status === 'FAILED' || !review.result) {
     return { ok: false, message: 'KI-Prüfung fehlgeschlagen' };
+  }
+
+  if (data.updatedAt && review.createdAt && new Date(data.updatedAt).getTime() > new Date(review.createdAt).getTime() + 1000) {
+    return { ok: false, message: 'Glossar-Eintrag wurde nach der KI-Prüfung geändert. Bitte führe die Prüfung erneut durch.', review };
   }
 
   const result = review.result as { passed?: boolean; blockers?: unknown[]; warnings?: unknown[] };
@@ -116,6 +120,8 @@ async function applyGlossaryTranslation(entry: any, lang: string) {
 export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/glossary', async (req: FastifyRequest, reply: FastifyReply) => {
     const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(100, Number(query.take) || 50));
     const where: any = {};
     if (query.moduleId) where.moduleId = query.moduleId;
     if (query.status) where.status = query.status;
@@ -129,6 +135,8 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
     const [entries, total] = await Promise.all([
       prisma.glossaryEntry.findMany({
         where,
+        skip,
+        take,
         orderBy: { term: 'asc' },
         include: {
           module: { select: { id: true, name: true } },
@@ -143,6 +151,8 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/glossary', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const schema = z.object({
       term: z.string().min(1),
       definition: z.string().min(1),
@@ -156,6 +166,11 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const data = parsed.data;
+
+    if (data.moduleId) {
+      const moduleExists = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } });
+      if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+    }
 
     const error = await validateGlossaryAliases(data.aliases);
     if (error) return reply.status(400).send({ error });
@@ -211,6 +226,8 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch('/api/glossary/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({
       term: z.string().min(1).optional(),
@@ -225,6 +242,11 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const data = parsed.data;
+
+    if (data.moduleId) {
+      const moduleExists = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } });
+      if (!moduleExists) return reply.status(400).send({ error: 'Module not found' });
+    }
 
     const current = await prisma.glossaryEntry.findUnique({ where: { id } });
     if (!current) return reply.status(404).send({ error: 'Glossary entry not found' });
@@ -259,12 +281,19 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/api/glossary/:id', async (req: FastifyRequest, reply: FastifyReply) => {
     if (!requireAdmin(req, reply)) return;
     const { id } = req.params as { id: string };
-    await prisma.glossaryEntry.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.aIReview.deleteMany({ where: { glossaryEntryId: id } });
+      await tx.requirementGlossaryLink.deleteMany({ where: { glossaryEntryId: id } });
+      await tx.translation.deleteMany({ where: { glossaryEntryId: id } });
+      await tx.glossaryEntry.delete({ where: { id } });
+    });
     void audit('glossary', id, 'DELETE', req.user.sub, {});
     return { success: true };
   });
 
   app.post('/api/glossary/:id/submit', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({
       changeComment: z.string().optional(),
@@ -427,6 +456,8 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/glossary/:id/translate', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const schema = z.object({ targetLanguage: z.enum(['de', 'en']) });
     const parsed = schema.safeParse(req.body);
@@ -485,6 +516,8 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/glossary/:id/ai-review', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const { id } = req.params as { id: string };
     const current = await prisma.glossaryEntry.findUnique({ where: { id } });
     if (!current) return reply.status(404).send({ error: 'Glossary entry not found' });
@@ -502,7 +535,6 @@ export async function glossaryRoutes(app: FastifyInstance): Promise<void> {
       const result = await reviewGlossary({
         type: 'glossary',
         title: current.term,
-        description: current.definition,
         term: current.term,
         definition: current.definition,
         example: current.example ?? undefined,

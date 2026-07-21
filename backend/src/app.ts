@@ -14,6 +14,7 @@ import { glossaryRoutes } from './routes/glossary.js';
 import { exportRoutes } from './routes/export.js';
 import { usecaseRoutes } from './routes/usecases.js';
 import { tagRoutes } from './routes/tags.js';
+import { userRoutes } from './routes/users.js';
 import { auditRoutes } from './routes/audit.js';
 
 export async function buildApp() {
@@ -22,6 +23,7 @@ export async function buildApp() {
       level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     },
     trustProxy: true,
+    bodyLimit: 5 * 1024 * 1024,
   });
 
   await registerCors(app);
@@ -38,7 +40,22 @@ export async function buildApp() {
   await app.register(exportRoutes);
   await app.register(usecaseRoutes);
   await app.register(tagRoutes);
+  await app.register(userRoutes);
   await app.register(auditRoutes);
+
+  app.setErrorHandler((err, _req, reply) => {
+    const statusCode = (err as any).statusCode || 500;
+    if (process.env.NODE_ENV === 'production') {
+      app.log.error(err);
+      if (statusCode >= 500) {
+        return reply.status(statusCode).send({ error: 'Internal Server Error' });
+      }
+      return reply.status(statusCode).send({ error: (err as any).message || 'Internal Server Error' });
+    }
+    const message = err instanceof Error ? err.message : 'Internal Server Error';
+    const stack = err instanceof Error ? err.stack : undefined;
+    return reply.status(statusCode).send({ error: message, stack });
+  });
 
   if (process.env.NODE_ENV === 'production') {
     const publicDir = path.join(process.cwd(), 'public');
@@ -46,6 +63,16 @@ export async function buildApp() {
       root: publicDir,
       prefix: '/',
       wildcard: false,
+      cacheControl: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html') || filePath.endsWith('/')) {
+          res.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+        } else if (filePath.includes('/assets/')) {
+          res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+        } else {
+          res.setHeader('cache-control', 'public, max-age=0, must-revalidate');
+        }
+      },
     });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api')) {

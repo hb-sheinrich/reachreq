@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { BubbleMenu } from '@tiptap/vue-3/menus'
 import { Extension, type CommandProps } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -9,6 +10,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import Popover from 'primevue/popover'
 import type { GlossaryTerm } from '@/stores/glossary'
 
@@ -17,21 +19,32 @@ const props = defineProps<{
   editable?: boolean
   terms?: GlossaryTerm[]
   placeholder?: string
+  field?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
+  (e: 'createComment', anchor: { field: string; text: string; start: number; end: number }): void
 }>()
 
 const router = useRouter()
+const { t } = useI18n()
 
 const definedPopover = ref<InstanceType<typeof Popover> | null>(null)
 const definedTerm = ref<{ id?: string; term?: string; definition?: string }>({})
+const lastEmitted = ref<string>('')
+const lastTermKey = ref<string>('')
 
 const glossaryHighlightPluginKey = new PluginKey('glossaryHighlight')
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function termKey(terms?: GlossaryTerm[]): string {
+  return (terms || [])
+    .map((t) => `${t.id || ''}:${t.term || ''}:${(t.aliases || []).join(',')}`)
+    .join('|')
 }
 
 function escapeHtml(value: string) {
@@ -53,85 +66,108 @@ function plainTextToTiptapHtml(value: string): string {
     .join('')
 }
 
-function buildDecorations(doc: any, terms: GlossaryTerm[]) {
-  const decorations: Decoration[] = []
-  const definedSet = new Set<{ from: number; to: number }>()
+type TermEntry =
+  | { type: 'defined'; id: string; term: string; definition?: string; text: string }
+  | { type: 'alias'; alias: string; preferred: string; text: string }
 
-  const termPatterns = terms
-    .flatMap((term) => {
-      const result: {
-        regex: RegExp
-        type: 'defined' | 'alias'
-        id?: string
-        term?: string
-        definition?: string
-        alias?: string
-        preferred?: string
-        length: number
-      }[] = []
-      result.push({
-        regex: new RegExp(`\\b${escapeRegex(term.term)}\\b`, 'gi'),
-        type: 'defined',
-        id: term.id,
-        term: term.term,
-        definition: term.definition,
-        length: term.term.length,
-      })
-      for (const alias of term.aliases || []) {
-        if (!alias || alias.toLowerCase() === term.term.toLowerCase()) continue
-        result.push({
-          regex: new RegExp(`\\b${escapeRegex(alias)}\\b`, 'gi'),
-          type: 'alias',
-          alias,
-          preferred: term.term,
-          length: alias.length,
-        })
-      }
-      return result
-    })
-    .sort((a, b) => b.length - a.length)
+interface GlossaryPattern {
+  regex: RegExp | null
+  termMap: Map<string, TermEntry>
+}
+
+function buildPattern(terms: GlossaryTerm[]): GlossaryPattern {
+  const seen = new Set<string>()
+  const entries: TermEntry[] = []
+
+  for (const term of terms) {
+    if (!term?.term?.trim()) continue
+    const text = term.term.trim()
+    if (seen.has(text.toLowerCase())) continue
+    seen.add(text.toLowerCase())
+    entries.push({ type: 'defined', id: term.id, term: term.term, definition: term.definition, text })
+
+    for (const alias of term.aliases || []) {
+      if (!alias?.trim()) continue
+      const aliasText = alias.trim()
+      if (aliasText.toLowerCase() === text.toLowerCase()) continue
+      if (seen.has(aliasText.toLowerCase())) continue
+      seen.add(aliasText.toLowerCase())
+      entries.push({ type: 'alias', alias: aliasText, preferred: term.term, text: aliasText })
+    }
+  }
+
+  entries.sort((a, b) => {
+    if (b.text.length !== a.text.length) return b.text.length - a.text.length
+    if (a.type === 'defined' && b.type === 'alias') return -1
+    if (a.type === 'alias' && b.type === 'defined') return 1
+    return 0
+  })
+
+  const termMap = new Map<string, TermEntry>()
+  const parts: string[] = []
+  for (const entry of entries) {
+    const key = entry.text.toLowerCase()
+    if (termMap.has(key)) {
+      const existing = termMap.get(key)!
+      if (existing.type === 'defined' || entry.type !== 'defined') continue
+    }
+    termMap.set(key, entry)
+    parts.push(escapeRegex(entry.text))
+  }
+
+  if (parts.length === 0) return { regex: null, termMap }
+
+  const regex = new RegExp(`\\b(?:${parts.join('|')})\\b`, 'gi')
+  return { regex, termMap }
+}
+
+function buildDecorations(doc: any, pattern: GlossaryPattern): Decoration[] {
+  const { regex, termMap } = pattern
+  if (!regex || !termMap || termMap.size === 0) return []
+
+  const decorations: Decoration[] = []
 
   doc.descendants((node: any, pos: number) => {
     if (!node.isText || !node.text) return
     const text = node.text
     const covered: { from: number; to: number }[] = []
 
-    function isCovered(from: number, to: number) {
-      return covered.some((r) => from < r.to && to > r.from)
-    }
-
-    function addCovered(from: number, to: number) {
+    for (const match of text.matchAll(regex)) {
+      if (match.index === undefined) continue
+      const from = pos + match.index
+      const to = from + match[0].length
+      if (to === from) continue
+      if (covered.some((r) => from < r.to && to > r.from)) continue
       covered.push({ from, to })
-    }
 
-    for (const pattern of termPatterns) {
-      for (const match of text.matchAll(pattern.regex)) {
-        if (match.index === undefined) continue
-        const from = pos + match.index
-        const to = from + match[0].length
-        if (isCovered(from, to)) continue
-        addCovered(from, to)
+      const entry = termMap.get(match[0].toLowerCase())
+      if (!entry) continue
 
-        if (pattern.type === 'defined') {
-          decorations.push(
-            Decoration.inline(from, to, {
-              nodeName: 'span',
-              class: 'glossary-defined',
-              'data-glossary-id': pattern.id,
-              'data-glossary-term': pattern.term,
-              'data-glossary-definition': pattern.definition || '',
-              tabindex: '0',
-            }),
-          )
-        } else if (pattern.type === 'alias' && pattern.preferred && pattern.alias) {
-          decorations.push(
-            Decoration.inline(from, to, {
-              nodeName: 'span',
-              class: 'glossary-alias',
-              title: `Bitte durch den korrekten Glossarbegriff '${pattern.preferred}' ersetzen.`,
-            }),
-          )
-        }
+      if (entry.type === 'defined') {
+        decorations.push(
+          Decoration.inline(from, to, {
+            nodeName: 'span',
+            class: 'glossary-defined',
+            'data-glossary-id': entry.id,
+            'data-glossary-term': entry.term,
+            'data-glossary-definition': entry.definition || '',
+            role: 'button',
+            'aria-haspopup': 'dialog',
+            'aria-expanded': 'false',
+            'aria-describedby': 'glossary-description',
+            tabindex: '0',
+          }),
+        )
+      } else {
+        decorations.push(
+          Decoration.inline(from, to, {
+            nodeName: 'span',
+            class: 'glossary-alias',
+            'data-glossary-alias': entry.alias,
+            'data-glossary-preferred': entry.preferred,
+            title: t('useCase.aliasTooltip', { term: entry.preferred }),
+          }),
+        )
       }
     }
   })
@@ -151,7 +187,7 @@ const GlossaryHighlight = Extension.create({
     return {
       setGlossaryTerms: (terms: GlossaryTerm[]) => ({ tr, dispatch }: CommandProps) => {
         if (dispatch) {
-          tr.setMeta(key, { terms })
+          tr.setMeta(key, { terms, pattern: buildPattern(terms) })
           dispatch(tr)
         }
         return true
@@ -164,18 +200,21 @@ const GlossaryHighlight = Extension.create({
       new Plugin({
         key,
         state: {
-          init: () => ({ terms: this.options.terms as GlossaryTerm[] }),
+          init: () => {
+            const terms = this.options.terms as GlossaryTerm[]
+            return { terms, pattern: buildPattern(terms) }
+          },
           apply: (tr, value) => {
             const meta = tr.getMeta(key)
-            if (meta) return { ...value, ...meta }
+            if (meta) return { ...value, terms: meta.terms || value.terms, pattern: meta.pattern || value.pattern }
             return value
           },
         },
         props: {
           decorations: function (state) {
-            const pluginState = this.getState(state) as { terms: GlossaryTerm[] } | undefined
-            const terms = pluginState?.terms || []
-            return DecorationSet.create(state.doc, buildDecorations(state.doc, terms))
+            const pluginState = this.getState(state) as { pattern: GlossaryPattern } | undefined
+            const pattern = pluginState?.pattern || { regex: null, termMap: new Map() }
+            return DecorationSet.create(state.doc, buildDecorations(state.doc, pattern))
           },
         },
       }),
@@ -187,6 +226,37 @@ const editorClasses = computed(() => [
   'editor-content',
   props.editable ? 'edit-mode' : 'view-mode',
 ])
+
+function showPopover(event: Event, el: HTMLElement) {
+  definedTerm.value = {
+    id: el.dataset.glossaryId,
+    term: el.dataset.glossaryTerm,
+    definition: el.dataset.glossaryDefinition,
+  }
+  nextTick(() => {
+    definedPopover.value?.show(event)
+  })
+}
+
+function hidePopover(event?: FocusEvent | MouseEvent) {
+  const related = event?.relatedTarget as HTMLElement | null
+  if (!related?.closest('.glossary-defined, .glossary-popover')) {
+    definedPopover.value?.hide()
+  }
+}
+
+function createCommentFromSelection() {
+  const editorInstance = editor.value
+  if (!editorInstance || !props.field) return
+  const { state } = editorInstance
+  const { from, to } = state.selection
+  if (from === to) return
+  const text = state.doc.textBetween(from, to, '\n')
+  const start = state.doc.textBetween(0, from, '\n').length
+  const end = start + text.length
+  emit('createComment', { field: props.field, text, start, end })
+  editorInstance.commands.blur()
+}
 
 const editor = useEditor({
   content: plainTextToTiptapHtml(props.modelValue || ''),
@@ -203,6 +273,8 @@ const editor = useEditor({
       code: false,
       bold: false,
       italic: false,
+      link: false,
+      underline: false,
     }),
     Underline,
     Link.configure({
@@ -212,31 +284,33 @@ const editor = useEditor({
     Placeholder.configure({
       placeholder: props.placeholder || '',
       emptyEditorClass: 'is-editor-empty',
+      showOnlyWhenEditable: true,
     }),
     GlossaryHighlight.configure({ terms: props.terms || [] }),
   ],
   editorProps: {
+    attributes: {
+      'data-field': props.field || '',
+    },
     handleDOMEvents: {
-      mouseenter: (view, event) => {
+      mouseover: (view, event) => {
         const target = event.target as HTMLElement | null
         const el = target?.closest('.glossary-defined') as HTMLElement | null
-        if (el) {
-          definedTerm.value = {
-            id: el.dataset.glossaryId,
-            term: el.dataset.glossaryTerm,
-            definition: el.dataset.glossaryDefinition,
-          }
-          nextTick(() => {
-            definedPopover.value?.show(event as Event)
-          })
-        }
+        if (el) showPopover(event as Event, el)
         return false
       },
-      mouseleave: (view, event) => {
-        const related = event.relatedTarget as HTMLElement | null
-        if (!related?.closest('.glossary-defined')) {
-          definedPopover.value?.hide()
-        }
+      mouseout: (view, event) => {
+        hidePopover(event as MouseEvent)
+        return false
+      },
+      focusin: (view, event) => {
+        const target = event.target as HTMLElement | null
+        const el = target?.closest('.glossary-defined') as HTMLElement | null
+        if (el) showPopover(event as Event, el)
+        return false
+      },
+      focusout: (view, event) => {
+        hidePopover(event as FocusEvent)
         return false
       },
       click: (view, event) => {
@@ -255,7 +329,8 @@ const editor = useEditor({
     },
   },
   onUpdate: ({ editor }) => {
-    emit('update:modelValue', editor.getText())
+    lastEmitted.value = editor.getText()
+    emit('update:modelValue', lastEmitted.value)
   },
 })
 
@@ -264,8 +339,15 @@ watch(
   (newValue) => {
     const editorInstance = editor.value
     if (!editorInstance) return
-    if (newValue === editorInstance.getText()) return
-    editorInstance.commands.setContent(plainTextToTiptapHtml(newValue || ''), { emitUpdate: false })
+    const next = newValue ?? ''
+    if (next === lastEmitted.value) return
+    const currentText = editorInstance.getText()
+    if (next === currentText) {
+      lastEmitted.value = currentText
+      return
+    }
+    editorInstance.commands.setContent(plainTextToTiptapHtml(next), { emitUpdate: false })
+    lastEmitted.value = editorInstance.getText()
   },
 )
 
@@ -279,9 +361,12 @@ watch(
 watch(
   () => props.terms,
   (terms) => {
-    ;(editor.value?.commands as any).setGlossaryTerms(terms || [])
+    if (!editor.value) return
+    const key = termKey(terms)
+    if (key === lastTermKey.value) return
+    lastTermKey.value = key
+    ;(editor.value.commands as any).setGlossaryTerms(terms || [])
   },
-  { deep: true },
 )
 
 </script>
@@ -289,6 +374,22 @@ watch(
 <template>
   <div>
     <editor-content :editor="editor" :class="editorClasses" />
+    <BubbleMenu
+      v-if="editor && field"
+      :editor="editor"
+      :options="{ placement: 'top' }"
+    >
+      <div class="flex items-center gap-1 rounded-field bg-surface border border-border shadow-lg px-2 py-1">
+        <Button
+          icon="pi pi-comment"
+          :label="t('useCase.comment.create')"
+          size="small"
+          text
+          @click="createCommentFromSelection"
+        />
+      </div>
+    </BubbleMenu>
+    <span id="glossary-description" class="sr-only">{{ definedTerm.definition }}</span>
     <Popover ref="definedPopover" class="glossary-popover">
       <template v-if="definedTerm.term">
         <div class="p-3 max-w-xs">
@@ -299,7 +400,7 @@ watch(
             :to="`/glossary/${definedTerm.id}`"
             class="text-sm text-link hover:underline"
           >
-            Zum Glossar
+            {{ t('useCase.glossaryPopover.link') }}
           </router-link>
         </div>
       </template>

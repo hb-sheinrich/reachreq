@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteUpdate, onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'primevue/usetoast'
 import { useRequirementsStore } from '@/stores/requirements'
 import { useModulesStore } from '@/stores/modules'
 import { useAuthStore } from '@/stores/auth'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useAutosave } from '@/services/autosave'
+import { api } from '@/services/api'
 import { useTitle } from '@/composables/useTitle'
-import { useCaseMessages } from '@/locales/useCase'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import Dropdown from 'primevue/dropdown'
+import Select from 'primevue/select'
 import TabPanel from 'primevue/tabpanel'
 import TabView from 'primevue/tabview'
 import Dialog from 'primevue/dialog'
@@ -24,8 +25,10 @@ import VersionTimeline from '@/components/VersionTimeline.vue'
 import AIReviewPanel from '@/components/AIReviewPanel.vue'
 import CommentList from '@/components/CommentList.vue'
 import AutosaveIndicator from '@/components/AutosaveIndicator.vue'
+import { classificationClass } from '@/utils/classification'
 
-const { t } = useI18n({ messages: useCaseMessages })
+const { t } = useI18n()
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const store = useRequirementsStore()
@@ -35,25 +38,30 @@ const glossary = useGlossaryStore()
 
 const id = computed(() => route.params.id as string)
 const draft = ref<any>({})
+const ready = ref(false)
 const activeTab = ref(0)
 const showReject = ref(false)
 const rejectReason = ref('')
 const editMode = ref(false)
 const reviewTrigger = ref(0)
-const acceptanceCriteriaText = ref('')
+const showSubmitGate = ref(false)
+const gateReview = ref<{ id: string; result: any } | null>(null)
+const gateIgnoreReason = ref('')
+const gateSubmitting = ref(false)
 const appendixEntries = ref<{ key: string; value: string }[]>([])
 const jiraLoading = ref(false)
-const importLoading = ref(false)
-const importError = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
+const pendingAnchor = ref<{ field: string; text: string; start: number; end: number } | null>(null)
+const viewLanguage = ref<'de' | 'en'>('de')
+const translating = ref(false)
 
 useTitle(computed(() => store.current?.humanReadableId || ''))
 
 const classificationOptions = [
-  { label: t('useCase.classifications.MUST_HAVE'), value: 'MUST_HAVE' },
-  { label: t('useCase.classifications.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
-  { label: t('useCase.classifications.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
-  { label: t('useCase.classifications.WONT_HAVE'), value: 'WONT_HAVE' },
+  { label: t('classification.MUST_HAVE'), value: 'MUST_HAVE' },
+  { label: t('classification.SHOULD_HAVE'), value: 'SHOULD_HAVE' },
+  { label: t('classification.NICE_TO_HAVE'), value: 'NICE_TO_HAVE' },
+  { label: t('classification.WONT_HAVE'), value: 'WONT_HAVE' },
+  { label: t('classification.IMPORTED'), value: 'IMPORTED' },
 ]
 
 const statusClasses: Record<string, string> = {
@@ -63,22 +71,12 @@ const statusClasses: Record<string, string> = {
   APPROVED: 'bg-status-approved-bg text-status-approved-fg',
   REJECTED: 'bg-status-rejected-bg text-status-rejected-fg',
   POSTPONED: 'bg-status-postponed-bg text-status-postponed-fg',
+  IMPORTED: 'bg-status-imported-bg text-status-imported-fg',
   ARCHIVED: 'bg-status-archived-bg text-status-archived-fg',
-}
-
-const classificationClasses: Record<string, string> = {
-  MUST_HAVE: 'bg-classification-must-bg text-classification-must-fg',
-  SHOULD_HAVE: 'bg-classification-should-bg text-classification-should-fg',
-  NICE_TO_HAVE: 'bg-classification-nice-bg text-classification-nice-fg',
-  WONT_HAVE: 'bg-classification-wont-bg text-classification-wont-fg',
 }
 
 function statusClass(status: string) {
   return statusClasses[status] || 'bg-surface-2 text-text-muted'
-}
-
-function classificationClass(classification: string) {
-  return classificationClasses[classification] || 'bg-surface-2 text-text-muted'
 }
 
 function formatDate(value?: string) {
@@ -92,30 +90,69 @@ function formatDate(value?: string) {
   })
 }
 
+const isTranslation = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage)
+
 const isEditable = computed(() => {
-  return store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW'
+  return (store.current?.status === 'DRAFT' || store.current?.status === 'IN_REVIEW' || store.current?.status === 'IMPORTED') && !isTranslation.value
 })
+
+const canTranslate = computed(() => store.current !== null && viewLanguage.value !== store.current?.originalLanguage && !store.current?.hasTranslation && !translating.value)
+
+const languageOptions = computed(() => [
+  { label: 'DE', value: 'de' },
+  { label: 'EN', value: 'en' },
+])
+
+async function loadWithLanguage(lang: 'de' | 'en' = viewLanguage.value) {
+  await store.fetchRequirement(id.value, lang)
+  initDraft()
+}
 
 watch(isEditable, (editable) => {
   if (!editable) editMode.value = false
 })
 
+watch(viewLanguage, async () => {
+  await loadWithLanguage()
+})
+
+function cloneDeep<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
+  }
+}
+
 function initDraft() {
   if (!store.current) return
+  ready.value = false
   const source = store.current
   draft.value = {
-    ...JSON.parse(JSON.stringify(source)),
-    mainFlow: source.mainFlow || [],
-    alternativeFlows: source.alternativeFlows || [],
-    tags: source.tags || [],
-    acceptanceCriteria: source.acceptanceCriteria || [],
-    technicalAppendix: source.technicalAppendix || {},
+    title: source.title,
+    goal: source.goal,
+    precondition: source.precondition,
+    postcondition: source.postcondition,
+    mainFlow: cloneDeep(source.mainFlow || []),
+    alternativeFlows: (source.alternativeFlows || []).map((flow: any) => ({
+      id: flow.id,
+      title: flow.title || '',
+      afterStep: flow.afterStep ?? flow.branchAt ?? '',
+      steps: cloneDeep(flow.steps || ['']),
+    })),
+    tags: cloneDeep(source.tags || []),
+    technicalAppendix: cloneDeep(source.technicalAppendix || {}),
+    classification: source.classification,
+    moduleId: source.moduleId,
+    source: source.source,
+    originalLanguage: source.originalLanguage,
   }
-  acceptanceCriteriaText.value = (draft.value.acceptanceCriteria || []).join('\n')
   appendixEntries.value = Object.entries(draft.value.technicalAppendix || {}).map(([k, v]) => ({
     key: k,
     value: String(v || ''),
   }))
+  ready.value = true
+  setBaseline()
 }
 
 const payload = () => {
@@ -125,44 +162,58 @@ const payload = () => {
       .map((e) => [e.key.trim(), e.value]),
   )
   return {
-    ...draft.value,
-    acceptanceCriteria: acceptanceCriteriaText.value
-      .split('\n')
-      .filter((x) => x.trim())
-      .map((x) => x.trim()),
+    title: draft.value.title,
+    goal: draft.value.goal,
+    precondition: draft.value.precondition,
+    postcondition: draft.value.postcondition,
+    mainFlow: draft.value.mainFlow,
+    alternativeFlows: draft.value.alternativeFlows,
+    tags: draft.value.tags,
+    classification: draft.value.classification,
+    moduleId: draft.value.moduleId,
+    source: draft.value.source,
+    originalLanguage: draft.value.originalLanguage,
     technicalAppendix,
   }
 }
 
 const autosaveSource = computed(() => ({
   ...draft.value,
-  acceptanceCriteriaText: acceptanceCriteriaText.value,
   appendixEntries: appendixEntries.value,
 }))
 
-const { status, statusMessage, forceSave, setupWatch } = useAutosave(
-  id.value,
+const { status, statusMessage, forceSave, setupWatch, setBaseline } = useAutosave(
+  id,
   payload,
-  (data) => store.updateRequirement(id.value, data, store.current?.editVersion || 0),
+  (targetId, data) => store.updateRequirement(targetId, data, store.current?.editVersion || 0),
 )
 
-setupWatch(autosaveSource)
+setupWatch(autosaveSource, ready)
 
 onMounted(async () => {
   await auth.fetchUser()
   await modulesStore.fetchModules()
   await glossary.fetchTerms()
-  await store.fetchRequirement(id.value)
   await store.fetchVersions(id.value)
-  initDraft()
+  await loadWithLanguage()
+  viewLanguage.value = (store.current?.originalLanguage as 'de' | 'en') || 'de'
 })
 
 watch(id, async (newId) => {
   if (!newId) return
-  await forceSave()
-  await store.fetchRequirement(newId)
   await store.fetchVersions(newId)
-  initDraft()
+  await loadWithLanguage()
+  viewLanguage.value = (store.current?.originalLanguage as 'de' | 'en') || 'de'
+})
+
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.params.id !== from.params.id) {
+    await forceSave(from.params.id as string)
+  }
+})
+
+onBeforeRouteLeave(async () => {
+  await forceSave()
 })
 
 function toggleEdit() {
@@ -172,14 +223,45 @@ function toggleEdit() {
 
 async function submit() {
   await forceSave()
-  await store.submitRequirement(id.value)
-  reviewTrigger.value++
-  await store.fetchVersions(id.value)
+  gateSubmitting.value = true
+  try {
+    const aiReview = await store.review(id.value)
+    if (!aiReview || aiReview.status === 'FAILED') {
+      toast.add({ severity: 'error', summary: 'KI-Prüfung fehlgeschlagen', detail: 'Bitte versuche es später erneut.', life: 5000 })
+      return
+    }
+    const result = aiReview.result
+    if (result && (result.blockers?.length || result.warnings?.length)) {
+      gateReview.value = { id: aiReview.id, result }
+      gateIgnoreReason.value = ''
+      showSubmitGate.value = true
+      return
+    }
+    await store.submitRequirement(id.value, { aiReviewId: aiReview.id })
+    reviewTrigger.value++
+    await store.fetchVersions(id.value)
+    await loadWithLanguage(viewLanguage.value)
+  } finally {
+    gateSubmitting.value = false
+  }
 }
 
 async function approve() {
   await store.approveRequirement(id.value)
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
+}
+
+async function confirmSubmitWithIgnore() {
+  if (!gateReview.value || !gateIgnoreReason.value.trim()) return
+  await store.submitRequirement(id.value, {
+    aiReviewId: gateReview.value.id,
+    ignoreWarningsReason: gateIgnoreReason.value.trim(),
+  })
+  showSubmitGate.value = false
+  reviewTrigger.value++
+  await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function reject() {
@@ -187,23 +269,45 @@ async function reject() {
   showReject.value = false
   rejectReason.value = ''
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function reopen() {
   await store.reopenRequirement(id.value)
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function rollback() {
   await store.startEdit(id.value)
   await store.fetchVersions(id.value)
-  initDraft()
+  const originalLang = (store.current?.originalLanguage as 'de' | 'en') || 'de'
+  viewLanguage.value = originalLang
+  await loadWithLanguage(originalLang)
   editMode.value = true
 }
 
 async function onReview(payload: { reviewedByCe?: boolean; reviewedByAscShe?: boolean }) {
   await store.setReview(id.value, payload)
   await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
+}
+
+function onCreateComment(anchor: { field: string; text: string; start: number; end: number }) {
+  pendingAnchor.value = anchor
+  activeTab.value = 3
+}
+
+function onCommentJump(anchor: { field: string; text: string; start: number; end: number }) {
+  activeTab.value = 0
+  nextTick(() => {
+    const selector = `[data-field="${anchor.field}"] .ProseMirror`
+    const el = document.querySelector(selector) as HTMLElement | null
+    if (el) {
+      el.focus()
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
 }
 
 async function onCreateJira() {
@@ -213,52 +317,69 @@ async function onCreateJira() {
   } finally {
     jiraLoading.value = false
     await store.fetchVersions(id.value)
+    await loadWithLanguage(viewLanguage.value)
   }
 }
 
 async function onRestore(versionId: string) {
   await store.rollbackRequirement(id.value, versionId)
   await store.fetchVersions(id.value)
-  initDraft()
+  const originalLang = (store.current?.originalLanguage as 'de' | 'en') || 'de'
+  await loadWithLanguage(originalLang)
+  viewLanguage.value = originalLang
+  editMode.value = true
 }
 
-function onIgnoreWarnings(reason: string) {
-  store.submitRequirement(id.value, { ignoreWarningsReason: reason })
+async function onIgnoreWarnings(reason: string) {
+  await store.submitRequirement(id.value, { ignoreWarningsReason: reason })
+  reviewTrigger.value++
+  await store.fetchVersions(id.value)
+  await loadWithLanguage(viewLanguage.value)
 }
 
 async function runReview() {
   return await store.review(id.value)
 }
 
-function triggerImport() {
-  fileInput.value?.click()
-}
-
-async function onImportFile(event: Event) {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-  importLoading.value = true
-  importError.value = ''
+async function exportUseCase() {
+  if (!store.current) return
   try {
-    const text = await file.text()
-    const parsed = JSON.parse(text)
-    const payload = Array.isArray(parsed) ? parsed[0] : parsed
-    await store.importUseCase(id.value, payload)
-    await store.fetchVersions(id.value)
-    initDraft()
+    const data = await api.get(`/export/usecases/${id.value}.json`)
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const filename = `usecase-${store.current.humanReadableId || store.current.id}.json`
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
   } catch (err: any) {
-    importError.value = err.message || 'Import fehlgeschlagen'
-  } finally {
-    importLoading.value = false
-    if (target) target.value = ''
+    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || 'Export failed', life: 4000 })
   }
 }
 
 async function translateTo(language: 'de' | 'en') {
-  await store.translateRequirement(id.value, language)
-  await store.fetchRequirement(id.value)
-  initDraft()
+  if (!store.current) return
+  if (language === store.current.originalLanguage) {
+    toast.add({ severity: 'warn', summary: t('app.error'), detail: t('glossary.translationSameLanguage'), life: 3000 })
+    return
+  }
+  translating.value = true
+  try {
+    await store.translateRequirement(id.value, language)
+    toast.add({ severity: 'success', summary: t('app.success'), detail: t('glossary.translationSaved'), life: 3000 })
+    if (viewLanguage.value === language) {
+      await loadWithLanguage(language)
+    } else {
+      viewLanguage.value = language
+    }
+  } catch (err: any) {
+    toast.add({ severity: 'error', summary: t('app.error'), detail: err.message || t('glossary.translationError'), life: 4000 })
+  } finally {
+    translating.value = false
+  }
 }
 
 function moveMainStep(index: number, direction: number) {
@@ -283,7 +404,7 @@ function addMainStep() {
 }
 
 function addAlternativeFlow() {
-  draft.value.alternativeFlows.push({ branchAt: '', steps: [''] })
+  draft.value.alternativeFlows.push({ title: '', afterStep: '', steps: [''] })
 }
 
 function removeAlternativeFlow(flowIndex: number) {
@@ -315,13 +436,11 @@ function removeAppendixEntry(index: number) {
   appendixEntries.value.splice(index, 1)
 }
 
-function onTagClick(name: string) {
-  router.push({ name: 'Requirements', query: { tags: name } })
-}
+
 </script>
 
 <template>
-  <div v-if="store.current" class="max-w-7xl mx-auto">
+  <div v-if="store.current && ready" class="max-w-7xl mx-auto">
     <!-- Document header -->
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
       <div>
@@ -333,13 +452,13 @@ function onTagClick(name: string) {
             class="px-3 py-1 rounded-pill text-sm font-medium"
             :class="statusClass(store.current.status)"
           >
-            {{ t(`useCase.statuses.${store.current.status}`) }}
+            {{ t(`status.${store.current.status}`) }}
           </span>
           <span
-            class="px-3 py-1 rounded-pill text-sm font-medium"
+            class="px-3 py-1 rounded-pill text-sm font-medium font-mono"
             :class="classificationClass(store.current.classification)"
           >
-            {{ t(`useCase.classifications.${store.current.classification}`) }}
+            {{ store.current.classification }}
           </span>
           <AutosaveIndicator :status="status" :message="statusMessage" />
         </div>
@@ -357,7 +476,7 @@ function onTagClick(name: string) {
           @click="toggleEdit"
         />
         <Button
-          v-if="store.current.status === 'DRAFT' || store.current.status === 'IN_REVIEW'"
+          v-if="store.current.status === 'DRAFT' || store.current.status === 'IN_REVIEW' || store.current.status === 'IMPORTED'"
           icon="pi pi-send"
           :label="t('useCase.actions.submit')"
           @click="submit"
@@ -382,7 +501,7 @@ function onTagClick(name: string) {
           @click="reopen"
         />
         <Button
-          v-if="store.current.status !== 'DRAFT' && store.current.status !== 'IN_REVIEW'"
+          v-if="store.current.status !== 'DRAFT' && store.current.status !== 'IN_REVIEW' && store.current.status !== 'IMPORTED'"
           icon="pi pi-undo"
           :label="t('useCase.actions.rollback')"
           text
@@ -399,40 +518,47 @@ function onTagClick(name: string) {
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.id') }}</div>
               <div class="font-mono text-text">{{ store.current.humanReadableId }}</div>
-              <div v-if="store.current.useCaseId" class="font-mono text-text-muted text-sm">
-                {{ store.current.useCaseId }}
-              </div>
             </div>
 
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.status') }}</div>
               <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium" :class="statusClass(store.current.status)">
-                {{ t(`useCase.statuses.${store.current.status}`) }}
+                {{ t(`status.${store.current.status}`) }}
               </span>
             </div>
 
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.classification') }}</div>
-              <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium" :class="classificationClass(store.current.classification)">
-                {{ t(`useCase.classifications.${store.current.classification}`) }}
-              </span>
-            </div>
-
-            <div class="space-y-1">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</div>
-              <div v-if="!editMode" class="text-text">{{ store.current.category || '–' }}</div>
-              <InputText v-else v-model="draft.category" :placeholder="t('useCase.category')" class="w-full" />
-            </div>
-
-            <div class="space-y-1">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.useCaseId') }}</div>
-              <div v-if="!editMode" class="font-mono text-text">{{ store.current.useCaseId || '–' }}</div>
-              <InputText v-else v-model="draft.useCaseId" :placeholder="t('useCase.useCaseId')" class="w-full" />
+              <div v-if="!editMode">
+                <span class="inline-block px-3 py-1 rounded-pill text-sm font-medium font-mono" :class="classificationClass(store.current.classification)">
+                  {{ store.current.classification }}
+                </span>
+              </div>
+              <Select
+                v-else
+                v-model="draft.classification"
+                :options="classificationOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1">
               <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.originalLanguage') }}</div>
               <div class="font-mono text-text uppercase">{{ store.current.originalLanguage || 'de' }}</div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.viewLanguage') }}</div>
+              <Select
+                v-model="viewLanguage"
+                :options="languageOptions"
+                option-label="label"
+                option-value="value"
+                class="w-full"
+                :disabled="editMode"
+              />
             </div>
 
             <div class="space-y-2">
@@ -441,8 +567,8 @@ function onTagClick(name: string) {
             </div>
 
             <div class="border-t border-border pt-3 space-y-3">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.review.ce') }}</div>
-              <ReviewPanel :requirement="store.current" :user="auth.user" @update="onReview" />
+              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.review.title') }}</div>
+              <ReviewPanel :requirement="store.current" :user="auth.user" :disabled="!editMode" @update="onReview" />
             </div>
 
             <div v-if="auth.isAdmin && store.current.reviewedByAscShe" class="border-t border-border pt-3">
@@ -455,12 +581,9 @@ function onTagClick(name: string) {
             </div>
 
             <div class="border-t border-border pt-3 flex flex-wrap gap-2">
-              <Button icon="pi pi-file-import" :label="t('useCase.actions.import')" text size="small" @click="triggerImport" />
-              <Button icon="pi pi-language" :label="t('useCase.actions.translate')" text size="small" @click="translateTo('en')" />
+              <Button icon="pi pi-download" :label="t('useCase.actions.export')" text size="small" @click="exportUseCase" />
+              <Button icon="pi pi-language" :label="t('useCase.actions.translate')" text size="small" :disabled="!canTranslate" :loading="translating" @click="translateTo(viewLanguage)" />
             </div>
-            <input ref="fileInput" type="file" accept=".json" class="hidden" @change="onImportFile" />
-            <div v-if="importError" class="text-sm text-glossary-alias">{{ importError }}</div>
-            <div v-if="importLoading" class="text-sm text-text-muted">Importiere...</div>
           </aside>
 
           <!-- Document -->
@@ -476,40 +599,6 @@ function onTagClick(name: string) {
               </div>
             </section>
 
-            <!-- ID / Category -->
-            <section class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-border pb-6">
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.useCaseId') }}</label>
-                <div v-if="!editMode" class="font-mono text-text mt-1">{{ draft.useCaseId || '–' }}</div>
-                <InputText v-else v-model="draft.useCaseId" class="w-full mt-1" />
-              </div>
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.category') }}</label>
-                <div v-if="!editMode" class="text-text mt-1">{{ draft.category || '–' }}</div>
-                <InputText v-else v-model="draft.category" class="w-full mt-1" />
-              </div>
-            </section>
-
-            <!-- Tags -->
-            <section class="border-b border-border pb-6">
-              <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.tags') }}</label>
-              <div v-if="!editMode" class="flex flex-wrap gap-2 mt-2">
-                <button
-                  v-for="tag in draft.tags"
-                  :key="tag"
-                  type="button"
-                  class="px-2 py-1 rounded-pill bg-surface-2 text-text-muted text-sm font-mono hover:bg-border transition-colors"
-                  @click="onTagClick(tag)"
-                >
-                  {{ tag }}
-                </button>
-                <span v-if="!draft.tags?.length" class="text-text-subtle text-sm">–</span>
-              </div>
-              <div v-else class="mt-2">
-                <TagInput v-model="draft.tags" />
-              </div>
-            </section>
-
             <!-- Goal -->
             <section class="border-b border-border pb-6">
               <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.goal') }}</label>
@@ -519,6 +608,8 @@ function onTagClick(name: string) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.goal')"
+                  field="goal"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -532,6 +623,8 @@ function onTagClick(name: string) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.precondition')"
+                  field="precondition"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -555,6 +648,8 @@ function onTagClick(name: string) {
                       :editable="editMode"
                       :terms="glossary.terms"
                       :placeholder="`${t('useCase.mainFlow')} ${index + 1}`"
+                      :field="`mainFlow.${index}`"
+                      @create-comment="onCreateComment"
                     />
                   </div>
                   <div v-if="editMode" class="flex flex-col gap-1">
@@ -582,12 +677,16 @@ function onTagClick(name: string) {
                   class="border border-border rounded-card p-4 bg-surface-2"
                 >
                   <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                      <span class="px-2 py-1 rounded-field bg-border text-text font-mono text-sm">A{{ flowIndex + 1 }}</span>
-                      <div class="flex items-center gap-2">
-                        <span class="text-sm text-text-muted">{{ t('useCase.mainFlow') }}:</span>
-                        <span v-if="!editMode" class="font-mono text-text">{{ flow.branchAt || '–' }}</span>
-                        <InputText v-else v-model="flow.branchAt" placeholder="z.B. 2" class="w-20" />
+                    <div class="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                      <div class="flex items-center gap-3">
+                        <span class="px-2 py-1 rounded-field bg-border text-text font-mono text-sm">A{{ flowIndex + 1 }}</span>
+                        <span v-if="!editMode" class="font-medium text-text">{{ flow.title || `${t('useCase.flowTitle')} ${flowIndex + 1}` }}</span>
+                        <InputText v-else v-model="flow.title" :placeholder="`${t('useCase.flowTitle')} ${flowIndex + 1}`" class="w-full sm:w-64" />
+                      </div>
+                      <div class="flex items-center gap-2 text-sm">
+                        <span class="text-text-muted">{{ t('useCase.mainFlow') }}:</span>
+                        <span v-if="!editMode" class="font-mono text-text">{{ flow.afterStep || '–' }}</span>
+                        <InputText v-else v-model="flow.afterStep" placeholder="z.B. 2" class="w-20" />
                       </div>
                     </div>
                     <Button v-if="editMode" icon="pi pi-trash" text size="small" severity="danger" :title="t('useCase.actions.removeFlow')" @click="removeAlternativeFlow(flowIndex)" />
@@ -605,6 +704,8 @@ function onTagClick(name: string) {
                           :editable="editMode"
                           :terms="glossary.terms"
                           :placeholder="`${t('useCase.alternativeFlows')} A${flowIndex + 1}.${stepIndex + 1}`"
+                          :field="`altFlow.${flowIndex}.step.${stepIndex}`"
+                          @create-comment="onCreateComment"
                         />
                       </div>
                       <div v-if="editMode" class="flex flex-col gap-1">
@@ -633,6 +734,8 @@ function onTagClick(name: string) {
                   :editable="editMode"
                   :terms="glossary.terms"
                   :placeholder="t('useCase.postcondition')"
+                  field="postcondition"
+                  @create-comment="onCreateComment"
                 />
               </div>
             </section>
@@ -672,41 +775,8 @@ function onTagClick(name: string) {
               </table>
             </section>
 
-            <!-- Secondary: description, context, acceptance criteria -->
-            <section class="space-y-6">
-              <div class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.description') }}</div>
-              <TiptapEditor
-                v-model="draft.description"
-                :editable="editMode"
-                :terms="glossary.terms"
-                :placeholder="t('useCase.description')"
-              />
-
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.context') }}</label>
-                <div class="mt-2">
-                  <TiptapEditor
-                    v-model="draft.context"
-                    :editable="editMode"
-                    :terms="glossary.terms"
-                    :placeholder="t('useCase.context')"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.acceptanceCriteria') }}</label>
-                <div class="mt-2">
-                  <Textarea
-                    v-model="acceptanceCriteriaText"
-                    :disabled="!editMode"
-                    rows="4"
-                    class="w-full"
-                    :placeholder="t('useCase.acceptanceCriteria')"
-                  />
-                </div>
-              </div>
-
+            <!-- Source / Module -->
+            <section class="space-y-6 border-t border-border pt-6">
               <div v-if="editMode" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.source') }}</label>
@@ -714,21 +784,11 @@ function onTagClick(name: string) {
                 </div>
                 <div>
                   <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.module') }}</label>
-                  <Dropdown
+                  <Select
                     v-model="draft.moduleId"
                     :options="modulesStore.modules"
                     option-label="name"
                     option-value="id"
-                    class="w-full mt-1"
-                  />
-                </div>
-                <div>
-                  <label class="text-label uppercase tracking-wide text-text-muted">{{ t('useCase.classification') }}</label>
-                  <Dropdown
-                    v-model="draft.classification"
-                    :options="classificationOptions"
-                    option-label="label"
-                    option-value="value"
                     class="w-full mt-1"
                   />
                 </div>
@@ -739,7 +799,7 @@ function onTagClick(name: string) {
       </TabPanel>
 
       <TabPanel value="1" header="KI-Prüfung">
-        <AIReviewPanel :key="reviewTrigger" :review-fn="runReview" :on-ignore-warnings="onIgnoreWarnings" />
+        <AIReviewPanel :key="reviewTrigger" :auto-run="reviewTrigger > 0" :review-fn="runReview" :on-ignore-warnings="onIgnoreWarnings" />
       </TabPanel>
 
       <TabPanel value="2" header="Versionen">
@@ -747,7 +807,7 @@ function onTagClick(name: string) {
       </TabPanel>
 
       <TabPanel value="3" header="Kommentare">
-        <CommentList :requirement-id="id" />
+        <CommentList :requirement-id="id" v-model:pending-anchor="pendingAnchor" @jump="onCommentJump" />
       </TabPanel>
     </TabView>
 
@@ -755,6 +815,35 @@ function onTagClick(name: string) {
       <div class="space-y-3 min-w-96">
         <Textarea v-model="rejectReason" placeholder="Begründung" class="w-full" />
         <Button :label="t('useCase.actions.reject')" severity="danger" class="w-full" @click="reject" />
+      </div>
+    </Dialog>
+
+    <Dialog v-model:visible="showSubmitGate" header="KI-Prüfung" modal>
+      <div class="space-y-4 min-w-[28rem]" v-if="gateReview">
+        <div v-if="gateReview.result.blockers?.length" class="space-y-2">
+          <h4 class="font-display font-semibold text-glossary-alias">Blocker</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li v-for="(b, i) in gateReview.result.blockers" :key="`b-${i}`">
+              <strong>{{ b.field }}:</strong> {{ b.message }}
+              <span v-if="b.suggestion" class="text-sm text-text-muted">({{ b.suggestion }})</span>
+            </li>
+          </ul>
+        </div>
+        <div v-if="gateReview.result.warnings?.length" class="space-y-2">
+          <h4 class="font-display font-semibold text-status-in-review-fg">Warnungen</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li v-for="(w, i) in gateReview.result.warnings" :key="`w-${i}`">
+              <strong>{{ w.field }}:</strong> {{ w.message }}
+            </li>
+          </ul>
+          <div v-if="!gateReview.result.blockers?.length" class="space-y-2">
+            <Textarea v-model="gateIgnoreReason" placeholder="Begründung für das Ignorieren der Warnungen" rows="3" class="w-full" />
+            <Button label="Mit Begründung zur Freigabe" class="w-full" @click="confirmSubmitWithIgnore" />
+          </div>
+        </div>
+        <div v-if="gateReview.result.blockers?.length" class="flex justify-end">
+          <Button label="OK" @click="showSubmitGate = false" />
+        </div>
       </div>
     </Dialog>
   </div>

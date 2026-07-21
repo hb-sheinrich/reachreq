@@ -1,20 +1,34 @@
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted, type Ref } from 'vue'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
 export function useAutosave<T extends Record<string, unknown>>(
-  id: string,
+  id: Ref<string>,
   getter: () => T,
-  saver: (data: T) => Promise<unknown>
+  saver: (id: string, data: T) => Promise<unknown>
 ) {
   const status = ref<SaveStatus>('idle')
   const statusMessage = ref('')
   let timer: number | null = null
+  let lastData: string | undefined = undefined
+  let readyRef: Ref<boolean> | undefined
   const DEBOUNCE_MS = 2000
 
-  function loadDraft(): T | null {
+  function serialize(data: T): string {
     try {
-      const key = `draft:${id}`
+      return JSON.stringify(data)
+    } catch {
+      return ''
+    }
+  }
+
+  function draftKey(targetId: string) {
+    return `draft:${targetId}`
+  }
+
+  function loadDraft(targetId?: string): T | null {
+    try {
+      const key = draftKey(targetId || id.value)
       const raw = localStorage.getItem(key)
       if (!raw) return null
       return JSON.parse(raw) as T
@@ -23,27 +37,42 @@ export function useAutosave<T extends Record<string, unknown>>(
     }
   }
 
-  function saveDraft(data: T) {
+  function saveDraft(targetId: string, data: T) {
     try {
-      localStorage.setItem(`draft:${id}`, JSON.stringify(data))
+      localStorage.setItem(draftKey(targetId), JSON.stringify(data))
     } catch {
       // ignore
     }
   }
 
-  function clearDraft() {
-    localStorage.removeItem(`draft:${id}`)
+  function clearDraft(targetId: string) {
+    localStorage.removeItem(draftKey(targetId))
   }
 
-  async function save() {
+  function setBaseline() {
+    lastData = serialize(getter())
+  }
+
+  async function save(targetId?: string) {
+    if (readyRef && !readyRef.value) return
+    const currentId = targetId || id.value
     const data = getter()
+    const serialized = serialize(data)
+    if (lastData !== undefined && serialized === lastData) {
+      status.value = 'saved'
+      statusMessage.value = 'Gespeichert'
+      clearDraft(currentId)
+      return
+    }
+
     status.value = 'saving'
     statusMessage.value = 'Speichert...'
     try {
-      await saver(data)
+      await saver(currentId, data)
+      lastData = serialized
       status.value = 'saved'
       statusMessage.value = 'Gespeichert'
-      clearDraft()
+      clearDraft(currentId)
     } catch (err: any) {
       if (err.status === 409) {
         status.value = 'conflict'
@@ -52,35 +81,53 @@ export function useAutosave<T extends Record<string, unknown>>(
         status.value = 'error'
         statusMessage.value = err.message || 'Fehler'
       }
-      saveDraft(data)
+      saveDraft(currentId, data)
     }
   }
 
   function trigger() {
+    const targetId = id.value
     status.value = 'idle'
     statusMessage.value = ''
     if (timer) window.clearTimeout(timer)
-    timer = window.setTimeout(() => save(), DEBOUNCE_MS)
+    timer = window.setTimeout(() => save(targetId), DEBOUNCE_MS)
   }
 
-  function forceSave() {
+  function forceSave(overrideId?: string) {
     if (timer) window.clearTimeout(timer)
-    return save()
+    return save(overrideId)
   }
 
-  function setupWatch(source: any) {
-    watch(source, trigger, { deep: true })
+  function setupWatch(source: any, ready?: Ref<boolean>) {
+    readyRef = ready
+    const handleChange = () => {
+      if (ready && !ready.value) {
+        return
+      }
+      trigger()
+    }
+    watch(source, handleChange, { deep: true })
+    if (ready) {
+      watch(ready, (isReady) => {
+        if (isReady) {
+          setBaseline()
+        }
+      })
+    }
     const beforeUnload = () => {
+      if (ready && !ready.value) return
       if (status.value === 'saving' || status.value === 'idle') {
-        saveDraft(getter())
+        saveDraft(id.value, getter())
       }
     }
     window.addEventListener('beforeunload', beforeUnload)
     onUnmounted(() => {
       window.removeEventListener('beforeunload', beforeUnload)
       if (timer) window.clearTimeout(timer)
+      // best-effort flush of the pending save for the current id
+      save(id.value)
     })
   }
 
-  return { status, statusMessage, save, forceSave, loadDraft, saveDraft, clearDraft, setupWatch }
+  return { status, statusMessage, save, forceSave, loadDraft, saveDraft, clearDraft, setBaseline, setupWatch }
 }

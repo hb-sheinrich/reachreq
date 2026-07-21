@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
+import { requireWrite } from '../lib/auth.js';
 
 function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   if (!req.user.isAdmin) {
@@ -28,8 +29,13 @@ async function updateModulePath(tx: any, moduleId: string) {
 }
 
 export async function moduleRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/modules', async (_req, reply) => {
+  app.get('/api/modules', async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+    const skip = Math.max(0, Number(query.skip) || 0);
+    const take = Math.max(1, Math.min(200, Number(query.take) || 200));
     const modules = await prisma.module.findMany({
+      skip,
+      take,
       orderBy: [{ path: 'asc' }, { sortOrder: 'asc' }],
     });
     return { modules };
@@ -42,10 +48,12 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
     return { module };
   });
 
-  app.post('/api/modules', async (req, reply) => {
+  app.post('/api/modules', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireWrite(req, reply)) return;
+
     const schema = z.object({
       name: z.string().min(1),
-      code: z.string().min(1).max(10),
+      code: z.string().min(1).max(50),
       description: z.string().optional(),
       parentId: z.string().optional().nullable(),
       sortOrder: z.number().default(0),
@@ -82,7 +90,7 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const schema = z.object({
       name: z.string().min(1).optional(),
-      code: z.string().min(1).max(10).optional(),
+      code: z.string().min(1).max(50).optional(),
       description: z.string().optional().nullable(),
       parentId: z.string().optional().nullable(),
       sortOrder: z.number().optional(),

@@ -11,9 +11,6 @@ export interface RequirementVersion {
   id: string
   versionNumber: number
   title: string
-  description?: string
-  context?: string
-  acceptanceCriteria: string[]
   classification: string
   moduleId: string
   source?: string
@@ -32,11 +29,8 @@ export interface Requirement {
   humanReadableId: string
   moduleId: string
   title: string
-  description?: string
-  context?: string
-  acceptanceCriteria: string[]
-  classification: 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE'
-  status: 'DRAFT' | 'IN_REVIEW' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'POSTPONED'
+  classification: 'MUST_HAVE' | 'SHOULD_HAVE' | 'NICE_TO_HAVE' | 'WONT_HAVE' | 'IMPORTED'
+  status: 'DRAFT' | 'IN_REVIEW' | 'SUBMITTED_FOR_RELEASE' | 'APPROVED' | 'REJECTED' | 'POSTPONED' | 'IMPORTED'
   source?: string
   authorId: string
   currentVersionId?: string
@@ -51,13 +45,11 @@ export interface Requirement {
   _count?: { comments: number }
 
   // Use-Case 2.0 fields
-  useCaseId?: string
-  category?: string
   goal?: string
   precondition?: string
   postcondition?: string
   mainFlow: string[]
-  alternativeFlows: { id?: string; branchAt?: string; steps: string[] }[]
+  alternativeFlows: { id?: string; title?: string; afterStep?: string | number; branchAt?: string | number; steps: string[] }[]
   technicalAppendix?: Record<string, unknown>
   originalLanguage?: 'de' | 'en'
 
@@ -73,6 +65,9 @@ export interface Requirement {
   jiraIssueKey?: string
   jiraIssueUrl?: string
   jiraIssueCreatedAt?: string
+
+  // Translation state
+  hasTranslation?: boolean
 
   tags: string[]
 }
@@ -180,12 +175,6 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return data.translation
   }
 
-  async function importUseCase(id: string, payload: any) {
-    const data = await api.post(`/requirements/${id}/usecase/import`, payload)
-    current.value = data.requirement
-    return data.requirement
-  }
-
   async function fetchLinks(id: string) {
     const data = await api.get(`/requirements/${id}/links`)
     links.value = data
@@ -221,7 +210,7 @@ export const useRequirementsStore = defineStore('requirements', () => {
     fetchRequirements, fetchRequirement, createRequirement, updateRequirement,
     submitRequirement, approveRequirement, rejectRequirement, reopenRequirement,
     startEdit, rollbackRequirement, fetchVersions, setReview, createJiraTicket,
-    translateRequirement, importUseCase, fetchLinks, createLink, deleteLink,
+    translateRequirement, fetchLinks, createLink, deleteLink,
     fetchGlossaryLinks, setGlossaryLinks, review,
   }
 })

@@ -1,7 +1,25 @@
 import { createI18n } from 'vue-i18n'
+import { useCaseMessages } from '../locales/useCase'
 
 export const messages = {
   de: {
+    tag: {
+      createOption: "'{name}' anlegen",
+      create: 'Tag anlegen',
+      addPlaceholder: 'Tag hinzufügen...',
+    },
+    comment: {
+      title: 'Kommentare',
+      placeholder: 'Kommentar schreiben...',
+      submit: 'Senden',
+      reply: 'Antworten',
+      cancelReply: 'Abbrechen',
+      resolve: 'Erledigt',
+      reopen: 'Wieder öffnen',
+      replyingTo: 'Antwort an {name}',
+      anchorHint: 'Textstelle: {field}',
+      empty: 'Keine Kommentare.',
+    },
     app: {
       title: 'ReachReq — Anforderungen & Glossar',
       dashboard: 'Dashboard',
@@ -44,26 +62,21 @@ export const messages = {
       APPROVED: 'Freigegeben',
       REJECTED: 'Abgelehnt',
       POSTPONED: 'Zurückgestellt',
+      IMPORTED: 'Importiert',
       ARCHIVED: 'Archiviert',
     },
     classification: {
-      MUST_HAVE: 'Must have',
-      SHOULD_HAVE: 'Should have',
-      NICE_TO_HAVE: 'Nice to have',
-      WONT_HAVE: "Won't have",
-    },
-    dashboard: {
-      drafts: 'Entwürfe',
-      inReview: 'In Prüfung',
-      submitted: 'Zur Freigabe',
-      approved: 'Freigegeben',
+      MUST_HAVE: 'Muss',
+      SHOULD_HAVE: 'Soll',
+      NICE_TO_HAVE: 'Kann',
+      WONT_HAVE: 'Wird nicht',
+      IMPORTED: 'Importiert',
     },
     requirements: {
       title: 'Anforderungen',
       new: 'Neue Anforderung',
       filters: 'Filter',
       search: 'Suche',
-      export: 'Export JSON',
       import: 'Import Use-Cases',
       importTitle: 'Use-Cases importieren',
       selectFile: 'JSON-Datei auswählen',
@@ -80,6 +93,7 @@ export const messages = {
       tagFilter: 'Tags filtern',
       tagSearch: 'Tags suchen',
       id: 'ID',
+      tagClickHint: 'Nach diesem Tag filtern',
       titleColumn: 'Titel',
     },
     glossary: {
@@ -107,6 +121,7 @@ export const messages = {
       translationError: 'Übersetzung fehlgeschlagen',
       translationSameLanguage: 'Zielsprache entspricht der Ursprungssprache',
     },
+    useCase: useCaseMessages.de.useCase,
   },
   en: {
     app: {
@@ -151,6 +166,7 @@ export const messages = {
       APPROVED: 'Approved',
       REJECTED: 'Rejected',
       POSTPONED: 'Postponed',
+      IMPORTED: 'Imported',
       ARCHIVED: 'Archived',
     },
     classification: {
@@ -158,19 +174,13 @@ export const messages = {
       SHOULD_HAVE: 'Should have',
       NICE_TO_HAVE: 'Nice to have',
       WONT_HAVE: "Won't have",
-    },
-    dashboard: {
-      drafts: 'Drafts',
-      inReview: 'In Review',
-      submitted: 'Ready for Approval',
-      approved: 'Approved',
+      IMPORTED: 'Imported',
     },
     requirements: {
       title: 'Requirements',
       new: 'New Requirement',
       filters: 'Filters',
       search: 'Search',
-      export: 'Export JSON',
       import: 'Import Use-Cases',
       importTitle: 'Import Use-Cases',
       selectFile: 'Select JSON file',
@@ -188,6 +198,23 @@ export const messages = {
       tagSearch: 'Search tags',
       id: 'ID',
       titleColumn: 'Title',
+    },
+    tag: {
+      createOption: "Create '{name}'",
+      create: 'Create tag',
+      addPlaceholder: 'Add tag...',
+    },
+    comment: {
+      title: 'Comments',
+      placeholder: 'Write a comment...',
+      submit: 'Send',
+      reply: 'Reply',
+      cancelReply: 'Cancel',
+      resolve: 'Resolve',
+      reopen: 'Reopen',
+      replyingTo: 'Replying to {name}',
+      anchorHint: 'Text anchor: {field}',
+      empty: 'No comments yet.',
     },
     glossary: {
       title: 'Glossary',
@@ -214,6 +241,7 @@ export const messages = {
       translationError: 'Translation failed',
       translationSameLanguage: 'Target language equals original language',
     },
+    useCase: useCaseMessages.en.useCase,
   },
 }
 

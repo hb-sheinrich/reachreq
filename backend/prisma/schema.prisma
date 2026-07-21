@@ -20,6 +20,7 @@ enum RequirementStatus {
   APPROVED
   REJECTED
   POSTPONED
+  IMPORTED
 }
 
 enum RequirementClassification {
@@ -27,6 +28,7 @@ enum RequirementClassification {
   SHOULD_HAVE
   NICE_TO_HAVE
   WONT_HAVE
+  IMPORTED
 }
 
 enum CommentStatus {
@@ -69,6 +71,7 @@ model User {
   authoredRequirements     Requirement[]
   authoredRequirementVersions RequirementVersion[]
   authoredComments         Comment[]
+  commentMentions          CommentMention[]
   authoredGlossaryEntries  GlossaryEntry[]
   authoredGlossaryVersions GlossaryVersion[]
   auditLogs                AuditLog[]
@@ -136,8 +139,6 @@ model Requirement {
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
 
-  useCaseId         String?  @map("use_case_id")
-  category          String?
   goal              String?  @db.Text
   precondition      String?  @db.Text
   postcondition     String?  @db.Text
@@ -172,7 +173,7 @@ model Requirement {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   module         Module            @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  author         User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author         User              @relation(fields: [authorId], references: [id], onDelete: Restrict)
   currentVersion RequirementVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
   versions       RequirementVersion[] @relation("RequirementVersions")
   fromLinks      RequirementLink[] @relation("FromRequirement")
@@ -187,7 +188,6 @@ model Requirement {
   reviewerCe     User?             @relation("ReviewerCe", fields: [reviewerCeId], references: [id], onDelete: SetNull)
   reviewerAscShe User?             @relation("ReviewerAscShe", fields: [reviewerAscSheId], references: [id], onDelete: SetNull)
 
-  @@unique([moduleId, useCaseId])
   @@map("requirements")
 }
 
@@ -202,8 +202,6 @@ model RequirementVersion {
   context         String?  @db.Text
   acceptanceCriteria String[] @default([]) @map("acceptance_criteria")
 
-  useCaseId         String?  @map("use_case_id")
-  category          String?
   goal              String?  @db.Text
   precondition      String?  @db.Text
   postcondition     String?  @db.Text
@@ -238,13 +236,12 @@ model RequirementVersion {
 
   requirement     Requirement @relation("RequirementVersions", fields: [requirementId], references: [id], onDelete: Cascade)
   currentFor      Requirement? @relation("CurrentVersion")
-  author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author          User        @relation(fields: [authorId], references: [id], onDelete: Restrict)
   aiReview        AIReview?   @relation(fields: [aiReviewId], references: [id], onDelete: SetNull)
   reviewerCe      User?       @relation("ReviewerCeVersion", fields: [reviewerCeId], references: [id], onDelete: SetNull)
   reviewerAscShe  User?       @relation("ReviewerAscSheVersion", fields: [reviewerAscSheId], references: [id], onDelete: SetNull)
 
   @@unique([requirementId, versionNumber])
-  @@unique([moduleId, useCaseId])
   @@map("requirement_versions")
 }
 
@@ -255,8 +252,8 @@ model RequirementLink {
   type      LinkType
   createdAt DateTime @default(now()) @map("created_at")
 
-  fromRequirement Requirement @relation("FromRequirement", fields: [fromId], references: [id], onDelete: Cascade)
-  toRequirement   Requirement @relation("ToRequirement", fields: [toId], references: [id], onDelete: Cascade)
+  fromRequirement Requirement @relation("FromRequirement", fields: [fromId], references: [id], onDelete: Restrict)
+  toRequirement   Requirement @relation("ToRequirement", fields: [toId], references: [id], onDelete: Restrict)
 
   @@unique([fromId, toId, type])
   @@map("requirement_links")
@@ -267,8 +264,8 @@ model RequirementGlossaryLink {
   glossaryEntryId  String @map("glossary_entry_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  requirement   Requirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
-  glossaryEntry GlossaryEntry @relation(fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+  requirement   Requirement   @relation(fields: [requirementId], references: [id], onDelete: Restrict)
+  glossaryEntry GlossaryEntry @relation(fields: [glossaryEntryId], references: [id], onDelete: Restrict)
 
   @@id([requirementId, glossaryEntryId])
   @@map("requirement_glossary_links")
@@ -289,11 +286,23 @@ model Comment {
 
   requirement   Requirement?  @relation(fields: [requirementId], references: [id], onDelete: Cascade)
   glossaryEntry GlossaryEntry? @relation(fields: [glossaryEntryId], references: [id], onDelete: Cascade)
-  author        User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author        User          @relation(fields: [authorId], references: [id], onDelete: Restrict)
   parent        Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies       Comment[]     @relation("CommentReplies")
+  mentions      CommentMention[]
 
   @@map("comments")
+}
+
+model CommentMention {
+  id        String  @id @default(uuid())
+  commentId String  @map("comment_id")
+  userId    String  @map("user_id")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("comment_mentions")
 }
 
 model GlossaryEntry {
@@ -312,7 +321,7 @@ model GlossaryEntry {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  author        User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author        User @relation(fields: [authorId], references: [id], onDelete: Restrict)
   module        Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   currentVersion GlossaryVersion? @relation("CurrentGlossaryVersion", fields: [currentVersionId], references: [id])
   versions      GlossaryVersion[] @relation("GlossaryVersions")
@@ -342,7 +351,7 @@ model GlossaryVersion {
 
   glossaryEntry GlossaryEntry @relation("GlossaryVersions", fields: [glossaryEntryId], references: [id], onDelete: Cascade)
   currentFor    GlossaryEntry? @relation("CurrentGlossaryVersion")
-  author        User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author        User @relation(fields: [authorId], references: [id], onDelete: Restrict)
   aiReview      AIReview? @relation(fields: [aiReviewId], references: [id], onDelete: SetNull)
 
   @@unique([glossaryEntryId, versionNumber])
@@ -370,8 +379,8 @@ model Translation {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  requirement   Requirement?  @relation("RequirementTranslations", fields: [requirementId], references: [id], onDelete: Cascade)
-  glossaryEntry GlossaryEntry? @relation("GlossaryTranslations", fields: [glossaryEntryId], references: [id], onDelete: Cascade)
+  requirement   Requirement?  @relation("RequirementTranslations", fields: [requirementId], references: [id], onDelete: Restrict)
+  glossaryEntry GlossaryEntry? @relation("GlossaryTranslations", fields: [glossaryEntryId], references: [id], onDelete: Restrict)
 
   @@unique([requirementId, language])
   @@unique([glossaryEntryId, language])
@@ -388,9 +397,9 @@ model AIReview {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  requirement        Requirement? @relation(fields: [requirementId], references: [id], onDelete: Cascade)
-  glossaryEntry      GlossaryEntry? @relation(fields: [glossaryEntryId], references: [id], onDelete: Cascade)
-  author             User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  requirement        Requirement? @relation(fields: [requirementId], references: [id], onDelete: Restrict)
+  glossaryEntry      GlossaryEntry? @relation(fields: [glossaryEntryId], references: [id], onDelete: Restrict)
+  author             User @relation(fields: [authorId], references: [id], onDelete: Restrict)
   requirementVersions RequirementVersion[]
   glossaryVersions   GlossaryVersion[]
 
