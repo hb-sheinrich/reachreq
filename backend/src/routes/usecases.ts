@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { audit } from '../services/audit.js';
 import { requireWrite, requireAdmin } from '../lib/auth.js';
 import { upsertRequirementTags } from '../services/tags.js';
 import { createRequirementVersion } from '../services/versions.js';
-import { translateUseCase, type UseCase, type UseCaseTranslation } from '../services/translation.js';
+import { type UseCase } from '../services/translation.js';
 import { buildRequirementWhere } from './requirements.js';
 
 function isEditable(status: string) {
@@ -178,68 +179,24 @@ function exportUseCasesFile(requirements: any[]) {
   };
 }
 
-async function buildUseCasePayload(requirement: any): Promise<UseCase> {
-  return {
-    title: requirement.title,
-    goal: requirement.goal,
-    precondition: requirement.precondition,
-    postcondition: requirement.postcondition,
-    mainFlow: requirement.mainFlow,
-    alternativeFlows: requirement.alternativeFlows,
-    technicalAppendix: requirement.technicalAppendix,
-    tags: extractTagNames(requirement),
-    aliases: [],
-  };
-}
-
-async function createRequirementFromUseCase(
-  tx: any,
-  uc: UseCaseInput,
-  moduleId: string,
-  defaults: {
-    classification?: string;
-    status?: string;
-    originalLanguage?: string;
-    source?: string;
-    originTags?: string[];
-  },
-  authorId: string
-) {
-  const module = await tx.module.update({
-    where: { id: moduleId },
-    data: { sequenceCounter: { increment: 1 } },
+async function ensureTagIds(names: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const existing = await prisma.tag.findMany({
+    where: { name: { in: unique } },
+    select: { id: true, name: true },
   });
-
-  const fields = mapUseCaseToRequirementFields(uc);
-  const tags = [...new Set([...fields.tags, ...(defaults.originTags || [])])];
-
-  const requirement = await tx.requirement.create({
-    data: {
-      humanReadableId: `MOD-${module.code}-${String(module.sequenceCounter).padStart(4, '0')}`,
-      moduleId,
-      title: fields.title,
-      goal: fields.goal,
-      precondition: fields.precondition,
-      postcondition: fields.postcondition,
-      mainFlow: fields.mainFlow,
-      alternativeFlows: fields.alternativeFlows,
-      technicalAppendix: fields.technicalAppendix as any,
-      classification: (defaults.classification as any) ?? 'MUST_HAVE',
-      status: (defaults.status as any) ?? 'DRAFT',
-      source: defaults.source,
-      originalLanguage: defaults.originalLanguage ?? 'de',
-      authorId,
-    },
-  });
-
-  await upsertRequirementTags(tx, requirement.id, tags);
-  const version = await createRequirementVersion(tx, requirement, 'CREATE', authorId, 'Import aus Use-Case 2.0', tags);
-  await tx.requirement.update({
-    where: { id: requirement.id },
-    data: { currentVersionId: version.id },
-  });
-
-  return { ...requirement, currentVersionId: version.id, tags };
+  const map = new Map(existing.map((t) => [t.name, t.id]));
+  const missing = unique.filter((n) => !map.has(n));
+  if (missing.length) {
+    await prisma.tag.createMany({ data: missing.map((name) => ({ name })), skipDuplicates: true });
+    const created = await prisma.tag.findMany({
+      where: { name: { in: missing } },
+      select: { id: true, name: true },
+    });
+    for (const t of created) map.set(t.name, t.id);
+  }
+  return map;
 }
 
 export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
@@ -318,20 +275,106 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
     const originTags = file.originTags.map((t) => t.trim()).filter(Boolean);
     const source = originTags.length ? originTags.join(', ') : undefined;
 
-    const created = await prisma.$transaction(async (tx) => {
-      const requirements: any[] = [];
-      for (const uc of file.useCases) {
-        const requirement = await createRequirementFromUseCase(
-          tx,
-          uc,
-          moduleId,
-          { classification: 'IMPORTED', status: 'IMPORTED', originalLanguage, source, originTags },
-          req.user.sub
-        );
-        requirements.push(requirement);
-      }
-      return requirements;
-    });
+    const allTagNames: string[] = [...originTags];
+    for (const uc of file.useCases) {
+      if (Array.isArray(uc.tags)) allTagNames.push(...uc.tags);
+    }
+    const tagMap = await ensureTagIds(allTagNames);
+
+    const created = await prisma.$transaction(
+      async (tx) => {
+        const module = await tx.module.update({
+          where: { id: moduleId },
+          data: { sequenceCounter: { increment: file.useCases.length } },
+        });
+
+        const start = module.sequenceCounter - file.useCases.length + 1;
+        const requirementData = file.useCases.map((uc, i) => {
+          const fields = mapUseCaseToRequirementFields(uc);
+          const tags = [...new Set([...fields.tags, ...originTags])];
+          return {
+            fields,
+            tags,
+            humanReadableId: `MOD-${module.code}-${String(start + i).padStart(4, '0')}`,
+          };
+        });
+
+        const newRequirements = await tx.requirement.createManyAndReturn({
+          data: requirementData.map(({ fields, humanReadableId }) => ({
+            humanReadableId,
+            moduleId,
+            title: fields.title,
+            goal: fields.goal,
+            precondition: fields.precondition,
+            postcondition: fields.postcondition,
+            mainFlow: fields.mainFlow,
+            alternativeFlows: fields.alternativeFlows,
+            technicalAppendix: fields.technicalAppendix as any,
+            classification: 'IMPORTED' as any,
+            status: 'IMPORTED' as any,
+            source,
+            originalLanguage,
+            authorId: req.user.sub,
+          })),
+        });
+
+        const versionData = newRequirements.map((r, i) => {
+          const { fields, tags } = requirementData[i];
+          return {
+            requirementId: r.id,
+            versionNumber: 1,
+            changeType: 'CREATE',
+            changeComment: 'Import aus Use-Case 2.0',
+            title: fields.title,
+            goal: fields.goal,
+            precondition: fields.precondition,
+            postcondition: fields.postcondition,
+            mainFlow: fields.mainFlow,
+            alternativeFlows: fields.alternativeFlows,
+            technicalAppendix: fields.technicalAppendix as any,
+            classification: 'IMPORTED' as any,
+            status: 'IMPORTED' as any,
+            source,
+            originalLanguage,
+            moduleId,
+            authorId: r.authorId,
+            tags,
+            diff: null as any,
+            reviewedByCe: false,
+            reviewedByAscShe: false,
+          };
+        });
+
+        const newVersions = await tx.requirementVersion.createManyAndReturn({ data: versionData });
+
+        const requirementTagData: { requirementId: string; tagId: string }[] = [];
+        for (let i = 0; i < newRequirements.length; i++) {
+          const reqRecord = newRequirements[i];
+          const { tags } = requirementData[i];
+          for (const tagName of tags) {
+            const tagId = tagMap.get(tagName);
+            if (tagId) requirementTagData.push({ requirementId: reqRecord.id, tagId });
+          }
+        }
+        if (requirementTagData.length) {
+          await tx.requirementTag.createMany({ data: requirementTagData, skipDuplicates: true });
+        }
+
+        const versionIds = newVersions.map((v) => v.id);
+        const requirementIds = newRequirements.map((r) => r.id);
+        await tx.$executeRaw`
+          UPDATE requirements r
+          SET current_version_id = v.id
+          FROM requirement_versions v
+          WHERE r.id = v.requirement_id
+            AND v.id IN (${Prisma.join(versionIds)})
+            AND r.id IN (${Prisma.join(requirementIds)})
+        `;
+
+        return newRequirements;
+      },
+      { timeout: 120000 }
+    );
 
     void audit('import', null, 'IMPORT', req.user.sub, { count: created.length, format: 'usecases.json' });
     return { created: created.length };
@@ -360,55 +403,63 @@ export async function usecaseRoutes(app: FastifyInstance): Promise<void> {
 
     const fields = mapUseCaseToRequirementFields(data);
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updateData = {
-        title: fields.title,
-        goal: fields.goal,
-        precondition: fields.precondition,
-        postcondition: fields.postcondition,
-        mainFlow: fields.mainFlow,
-        alternativeFlows: fields.alternativeFlows,
-        technicalAppendix: fields.technicalAppendix as any,
-        status: current.status === 'IMPORTED' ? 'DRAFT' : current.status,
-        originalLanguage: current.originalLanguage ?? 'de',
-      };
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const updateData = {
+          title: fields.title,
+          goal: fields.goal,
+          precondition: fields.precondition,
+          postcondition: fields.postcondition,
+          mainFlow: fields.mainFlow,
+          alternativeFlows: fields.alternativeFlows,
+          technicalAppendix: fields.technicalAppendix as any,
+          status: current.status === 'IMPORTED' ? 'DRAFT' : current.status,
+          originalLanguage: current.originalLanguage ?? 'de',
+        };
 
-      const updatedCount = await tx.requirement.updateMany({
-        where: { id, editVersion: data.editVersion },
-        data: { ...updateData, editVersion: { increment: 1 } },
+        const updatedCount = await tx.requirement.updateMany({
+          where: { id, editVersion: data.editVersion },
+          data: { ...updateData, editVersion: { increment: 1 } },
+        });
+        if (updatedCount.count === 0) {
+          throw new Error('Conflict');
+        }
+
+        await upsertRequirementTags(tx, id, fields.tags);
+
+        const requirement = await tx.requirement.findUnique({
+          where: { id },
+          include: {
+            module: { select: { id: true, name: true, code: true } },
+            tags: { include: { tag: { select: { name: true } } } },
+          },
+        });
+
+        if (!requirement) throw new Error('Requirement disappeared');
+
+        const version = await createRequirementVersion(tx, requirement, 'EDIT', req.user.sub, 'Use-Case 2.0 Import');
+        await tx.requirement.update({
+          where: { id },
+          data: { currentVersionId: version.id },
+        });
+
+        return tx.requirement.findUnique({
+          where: { id },
+          include: {
+            module: { select: { id: true, name: true, code: true } },
+            author: { select: { id: true, name: true } },
+            currentVersion: { select: { id: true, versionNumber: true } },
+            tags: { include: { tag: { select: { name: true } } } },
+          },
+        });
       });
-      if (updatedCount.count === 0) {
-        throw new Error('Conflict');
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Conflict') {
+        return reply.status(409).send({ error: 'Conflict: requirement was modified by someone else' });
       }
-
-      await upsertRequirementTags(tx, id, fields.tags);
-
-      const requirement = await tx.requirement.findUnique({
-        where: { id },
-        include: {
-          module: { select: { id: true, name: true, code: true } },
-          tags: { include: { tag: { select: { name: true } } } },
-        },
-      });
-
-      if (!requirement) throw new Error('Requirement disappeared');
-
-      const version = await createRequirementVersion(tx, requirement, 'EDIT', req.user.sub, 'Use-Case 2.0 Import');
-      await tx.requirement.update({
-        where: { id },
-        data: { currentVersionId: version.id },
-      });
-
-      return tx.requirement.findUnique({
-        where: { id },
-        include: {
-          module: { select: { id: true, name: true, code: true } },
-          author: { select: { id: true, name: true } },
-          currentVersion: { select: { id: true, versionNumber: true } },
-          tags: { include: { tag: { select: { name: true } } } },
-        },
-      });
-    });
+      throw err;
+    }
 
     void audit('requirement', id, 'UPDATE', req.user.sub, { action: 'usecase_import' });
     return { requirement: updated };
